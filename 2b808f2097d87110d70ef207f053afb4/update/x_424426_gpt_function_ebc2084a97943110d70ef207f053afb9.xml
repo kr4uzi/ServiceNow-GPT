@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="x_424426_gpt_function">
+    <x_424426_gpt_function action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <description>Converts a PDF attachment to plain text.</description>
+        <name>pdf_to_text</name>
+        <run_at>server</run_at>
+        <script><![CDATA[/* global sys_id, sn_fd */
+/* eslint no-undef: "error" */
+(function (sys_id) {
+	
+	const outputs = sn_fd.FlowAPI.getRunner()
+		.action('x_424426_devops.javascript_probe')
+		.inForeground()
+		.withInputs({ 
+			'mid_server_name': 'Ubuntu',
+			'script': "ms.getConfigParameter('url') + '/' + ms.getConfigParameter('mid.instance.username') + '/' + ms.getConfigParameter('mid.instance.password')",
+			'probe_name': 'PDF2Text',
+			'probe_source': 'GPT'
+		})
+		.run()
+		.getOutputs();
+	
+})(sys_id);]]></script>
+        <sys_class_name>x_424426_gpt_function</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2023-07-29 08:48:09</sys_created_on>
+        <sys_id>ebc2084a97943110d70ef207f053afb9</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>pdf_to_text</sys_name>
+        <sys_package display_value="GPT" source="x_424426_gpt">2b808f2097d87110d70ef207f053afb4</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="GPT">2b808f2097d87110d70ef207f053afb4</sys_scope>
+        <sys_update_name>x_424426_gpt_function_ebc2084a97943110d70ef207f053afb9</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2023-07-29 08:48:09</sys_updated_on>
+    </x_424426_gpt_function>
+</record_update>

@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_script">
+    <sys_ui_script action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <description/>
+        <global>true</global>
+        <ignore_in_now_experience>false</ignore_in_now_experience>
+        <name>x_424426_gpt.loader</name>
+        <script><![CDATA[var x_424426_gpt = x_424426_gpt || {};
+x_424426_gpt.loader = (function() {
+	"use strict";
+	
+	/* global window, setTimeout */
+	/* eslint no-undef: "error" */
+	if (x_424426_gpt.loader) {
+		return x_424426_gpt.loader;
+	}
+	
+	var resources = {};
+	var resourceCallbacks = {};
+	
+	if (typeof window !== 'undefined' && window) {
+		resources['window'] = window;
+	} else {
+		setTimeout(function () {
+			setResource('window', this);
+		});
+	}
+	
+	getResource('window', function ($window) {
+		$window.addLoadEvent(function () {
+			if ($window.g_user) {
+				setResource('g_user', $window.g_user);
+			}
+		});
+	});
+	
+	var version = '1.0.0';
+	createScript('x_424426_gpt.gpt_prompt.jsdbx?v=' + version);
+
+	return {
+		set: setResource,
+		get: getResource,
+		type: 'loader'
+	};
+	
+	function getResource(resource, callback) {
+		if (resource in resources) {
+			if (callback) {
+				callback(resources[resource]);
+			} else {
+				return resources[resource];
+			}
+		} else if (callback) {
+			if (!(resource in resourceCallbacks)) {
+				resourceCallbacks[resource] = [];
+			}
+			
+			resourceCallbacks[resource].push(callback);
+		}
+	}
+	
+	function setResource(resource, value) {
+		resources[resource] = value;
+		(resourceCallbacks[resource] || []).forEach(function (callback) {
+			callback(value);
+		});
+	}
+	
+	function createScript(src) {
+		getResource('window', function ($window) {
+			var script = $window.document.createElement('script');
+			script.src = src;
+			$window.document.head.appendChild(script);
+		});
+	}
+})();
+]]></script>
+        <script_name>loader</script_name>
+        <sys_class_name>sys_ui_script</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2023-07-25 06:59:58</sys_created_on>
+        <sys_id>5bfd38709798b110d70ef207f053af07</sys_id>
+        <sys_mod_count>10</sys_mod_count>
+        <sys_name>x_424426_gpt.loader</sys_name>
+        <sys_package display_value="GPT" source="x_424426_gpt">2b808f2097d87110d70ef207f053afb4</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="GPT">2b808f2097d87110d70ef207f053afb4</sys_scope>
+        <sys_update_name>sys_ui_script_5bfd38709798b110d70ef207f053af07</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2023-08-16 20:01:17</sys_updated_on>
+        <ui_type>0</ui_type>
+        <use_scoped_format>true</use_scoped_format>
+    </sys_ui_script>
+</record_update>

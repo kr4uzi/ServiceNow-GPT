@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_424426_gpt.ScopedOpenNLUCoalescer</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Unfortunately the Script Include "OpenNLUCoalescer" is not accessible from all scopes, so we cannot simply inherit from it&#13;
+/nav_to.do?uri=sys_script_include.do?sys_id=d025263e3b00330074bc456993efc4c5</description>
+        <name>ScopedOpenNLUCoalescer</name>
+        <script><![CDATA[class ScopedOpenNLUCoalescer {
+	constructor() {
+		
+	}
+
+	coalesce (type, value, context) {
+		const coalesced = this._coalesce(type, value, context);
+		return this._toString(coalesced);
+	}
+
+	_coalesce(type, value, context) {
+		switch (type) {
+			case 'BOOLEAN':
+				return this.coalesceBoolean(value);
+			case 'STATIC_CHOICE':
+			case 'REFERENCE_CHOICE':
+				return this.coalesceList(value, context);
+			case 'DATE':
+				return this.coalesceDate(value);
+			case 'TIME':
+				return this.coalesceTime(value);
+			case 'DATE_TIME':
+				return this.coalesceDateTime(value);
+			case 'TEXT':
+			default:
+				return this.coalesceText(value);
+		}
+	}
+
+	coalesceText(value) {
+		return value;
+	}
+
+	coalesceBoolean(value) {
+		if (!value) {
+			return null;
+		}
+		
+		const normalizedValue = value.toString().toLowerCase();
+		if (normalizedValue === 'true' || normalizedValue === 'yes') {
+			return 'true';
+		} else if (normalizedValue === 'false' || normalizedValue === 'no') {
+			return 'false';
+			// must return empty if the value doesn't match true or false
+		}
+
+		return null;
+	}
+
+	coalesceDate(value) {
+		if (gs.nil(value)) return '';
+		value = this._normalizeDateWord(value);
+
+		if (value === 'now') {
+			return this._dateTimeObjAsString(this._toDate(gs.now()));
+		} else if (value === 'today') {
+			return this._dateTimeObjAsString(this._toDate(gs.beginningOfToday()));
+		} else if (value === 'tomorrow') {
+			return this._dateTimeObjAsString(this._toDate(gs.beginningOfTomorrow()));
+		} else if (value === 'yesterday') {
+			return this._dateTimeObjAsString(this._toDate(gs.beginningOfYesterday()));
+		}
+
+		const coalesced = this._toDate(value);
+		return !gs.nil(coalesced) ? this._dateTimeObjAsString(coalesced) : '';
+	}
+
+	coalesceTime(value) {
+		if (gs.nil(value)) return '';
+		value = this._normalizeTimeWord(value);
+
+		if (value === 'now') {
+			return this._timeObjAsString(this._toTime(gs.nowDateTime()));
+		}
+
+		let coalesced = this._toTime(value);
+		if (gs.nil(coalesced)) {
+			const match = value.match(/^t(\d{2}):(\d{2})$/);
+			if (match) {
+				coalesced = this._toTime(match[1] + ':' + match[2] + ':00');
+			}
+		}
+
+		return !gs.nil(coalesced) ? this._timeObjAsString(coalesced) : '';
+	}
+
+	coalesceDateTime(value) {
+		if (gs.nil(value)) return '';
+		value = this._normalizeDateTimeWord(value);
+
+		const baseDateTime = new GlideDateTime();
+
+		if (value === 'now') {
+			return this._dateTimeObjAsString(baseDateTime);
+		} else if (value === 'today') {
+			return this._dateTimeObjAsString(baseDateTime);
+		} else if (value === 'tomorrow') {
+			baseDateTime.addDaysUTC(1);
+			return this._dateTimeObjAsString(baseDateTime);
+		} else if (value === 'yesterday') {
+			baseDateTime.addDaysUTC(-1);
+			return this._dateTimeObjAsString(baseDateTime);
+		}
+
+		let coalesced = this._toDateTime(value);
+		if (gs.nil(coalesced)) {
+			const match = value.match(/^(\d{4}-\d{2}-\d{2})t(\d{2}):(\d{2})$/);
+			if (match) {
+				coalesced = this._toTime(match[1] + ' ' + match[2] + ':' + match[3] + ':00');
+			}
+		}
+		
+		return !gs.nil(coalesced) ? this._dateTimeObjAsString(coalesced) : '';
+	}
+
+	_dateTimeObjAsString(obj) {
+		if (gs.nil(obj)) return '';
+		return '' + obj.toString();
+	}
+
+	_timeObjAsString(obj) {
+		if (gs.nil(obj)) return '';
+		return '' + obj.getDisplayValue();
+	}
+
+	_normalizeDateWord(word) {
+		if (gs.nil(word)) return '';
+		return word.toLowerCase().trim();
+	}
+
+	_normalizeTimeWord(word) {
+		if (gs.nil(word)) return '';
+		return word.toLowerCase().trim();
+	}
+
+	_normalizeDateTimeWord(word) {
+		if (gs.nil(word)) return '';
+		return word.toLowerCase().trim();
+	}
+
+	_toDate(value) {
+		if (!gs.nil(value)) {
+			const gdt = new GlideDateTime();
+			gdt.setValue(value + " 00:00:00");
+			if (gdt.isValid()) {
+				var gd = new GlideDate();
+				gd.setValue(value);
+				return gd;
+			}
+		}
+	}
+
+	_toTime(value) {
+		if (!gs.nil(value)) {
+			const gt = new GlideTime();
+			gt.setDisplayValue(value);
+			if (gt.isValid()) {
+				return gt;
+			}
+		}
+	}
+
+	_toDateTime(value) {
+		if (!gs.nil(value)) {
+			const gdt = new GlideDateTime();
+			gdt.setValue(value);
+			if (gdt.isValid()) {
+				return gdt;
+			}
+		}
+	}
+
+	_toString(value) {
+		return gs.nil(value) ? value : value.toString();
+	}
+}]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2023-08-13 20:45:40</sys_created_on>
+        <sys_id>6e31f98397a0f110d70ef207f053afdf</sys_id>
+        <sys_mod_count>3</sys_mod_count>
+        <sys_name>ScopedOpenNLUCoalescer</sys_name>
+        <sys_package display_value="GPT" source="x_424426_gpt">2b808f2097d87110d70ef207f053afb4</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="GPT">2b808f2097d87110d70ef207f053afb4</sys_scope>
+        <sys_update_name>sys_script_include_6e31f98397a0f110d70ef207f053afdf</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2023-08-13 20:48:17</sys_updated_on>
+    </sys_script_include>
+</record_update>

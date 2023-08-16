@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_page">
+    <sys_ui_page action="INSERT_OR_UPDATE">
+        <category>general</category>
+        <client_script><![CDATA[/* global window, GlideAjax, jslog */
+/* eslint no-undef: "error" */
+function addContext(context) {
+	appendChatHistoryElement({ role: 'system', content: context });
+}
+
+var gptContextVariables = {};
+function addContextVariable(variableName, value) {
+	gptContextVariables[variableName] = value;
+}
+
+function devops_keydownHandler(element, event) {
+	if (event.key == 'Enter' && !event.shiftKey) {
+		window.scrollTo(0, window.document.body.scrollHeight);
+		
+		var userInputElement = window.document.createElement('li');
+		userInputElement.dataset.role = 'user';
+		userInputElement.appendChild(window.document.createTextNode(element.value));
+		
+		element.disabled = true;
+		element.value = '';
+		element.setSelectionRange(0, 0);
+		
+		var conversationElement = window.document.getElementById('devops_conversation');
+		// insert the element on before the last list item which contains the input element
+		conversationElement.insertBefore(userInputElement, element.parentNode);
+		
+		var messages = [];
+		for (var i = 0, length = conversationElement.children.length - 1; i < length; i++) {
+			var child = conversationElement.children[i];
+			if (child.dataset.message) {
+				messages.push(JSON.parse(child.dataset.message));
+			} else {
+				messages.push({ role: child.dataset.role, content: child.textContent });
+			}
+		}
+		
+		(function gptCompletion() {
+			var ga = new GlideAjax('x_424426_gpt.GPTUtilClient');
+			ga.addParam('sysparm_name', 'completion');
+			ga.addParam('messages', JSON.stringify(messages));
+			ga.getXMLAnswer(function (result) {
+				result = JSON.parse(result);
+				if (result.status == 'success') {
+					result.background_messages.forEach(function (msg) {
+						appendChatHistoryElement(msg);
+					});
+
+					if (result.func) {
+						var argNames = [];
+						var argValues = [];
+						for (var arg in gptContextVariables) {
+							argNames.push(arg);
+							argValues.push(gptContextVariables[arg]);
+						}
+						for (var arg in result.func.args) {
+							argNames.push(arg);
+							argValues.push(result.func.args[arg]);
+						}
+						
+						appendChatHistoryElement({
+							role: 'function',
+							name: result.func.name,
+							content: Function.apply(null, argNames.concat([result.func.script])).apply(null, argValues)
+						});
+					} else {
+						// append real responses as markdown
+						appendChatHistoryElement({ role: 'assistant', content: result.response }, 'markdown');
+
+						element.disabled = false;
+						element.focus();
+					}
+				} else if (result.message) {
+					jslog(result.message, 'devops_gpt_conversation');
+				}
+			});
+		})();
+	}
+}
+
+function appendChatHistoryElement(msg, contentType) {
+	var chatHistoryElement = window.document.createElement('li');
+	chatHistoryElement.dataset.role = msg.role;
+	chatHistoryElement.dataset.function_call = !!msg.function_call;
+	chatHistoryElement.dataset.message = JSON.stringify(msg);
+
+	if (contentType == 'markdown') {
+		var historyContent = window.document.createElement('md-block');
+		historyContent.innerHTML = msg.content;
+		chatHistoryElement.appendChild(historyContent);
+	} else {
+		chatHistoryElement.appendChild(window.document.createTextNode(msg.content));
+	}
+
+	var conversationElement = window.document.getElementById('devops_conversation');
+	var conversationElements = conversationElement.children;
+	conversationElement.insertBefore(chatHistoryElement, conversationElements[conversationElements.length - 1]);
+}]]></client_script>
+        <description/>
+        <direct>false</direct>
+        <endpoint>x_424426_gpt_conversation.do</endpoint>
+        <html><![CDATA[<?xml version="1.0" encoding="utf-8" ?>
+<j:jelly trim="false" xmlns:j="jelly:core" xmlns:g="glide" xmlns:j2="null" xmlns:g2="null">
+	<script type="module" src="https://md-block.verou.me/md-block.js"></script>
+	<g:evaluate>
+		const credentialsProvider = new sn_cc.StandardCredentialsProvider();
+		const gptSupported = !!credentialsProvider.getCredentials(['api_key'], ['x_424426_gpt.openai_gpt']);
+		const gptConfigInvalid = gs.getMessage('gpt_config_invalid');
+		const gptInstructions = gs.getMessage('gpt_config_instruction', [gs.getProperty('glide.servlet.uri') + 'nav_to.do?uri=sys_alias.do?sys_id=18a04fac9710b110d70ef207f053af4c']);
+	</g:evaluate>
+	<style>
+		ul#devops_conversation {
+			height: 300px;
+			list-style-type: none;
+			padding: 0;
+			margin: 0;
+		}
+		
+		ul#devops_conversation li {
+			margin-top: 5px;
+		}
+		
+		ul#devops_conversation li[data-role="system"],
+		ul#devops_conversation li[data-role="function"] {
+			display: none;
+		}
+		
+		ul#devops_conversation li[data-role="user"] {
+			background-color: #d3d3d3;
+		}
+		
+		ul#devops_conversation li[data-role="assistant"] {
+			/*background-color: #e9e9e9;*/
+		}
+		
+		ul#devops_conversation li[data-function_call="true"] {
+			display: none;
+		}
+	</style>
+	
+	<ul id="devops_conversation">
+		<j:if test="${gptSupported}">
+			<li data-role="system">
+				Act as a co-pilot for a ServiceNow developer.
+			</li>
+			<li data-role="system">
+				Only use the functions you have been provided with.
+			</li>
+			<li data-role="system">
+				Provide all responses in markdown encoding.
+			</li>
+			<li style="margin-top: 5px">
+				<textarea
+					style="width: 100%"
+					onkeydown="devops_keydownHandler(this, event)"
+					placeholder="Hit &lt;Enter&gt; to send your message"
+					autofocus="true"
+				/>
+			</li>
+		</j:if>
+	</ul>
+	
+	<j:if test="${!gptSupported}">
+		<script>
+			// JSON.stringify workaround is used to render dynamic HTML (properties are dynamic)
+			document.write(
+				'<span style="width: 100%; color: red;">'
+					+ ${JSON.stringify(gptConfigInvalid)}
+					+ ${JSON.stringify(gptInstructions)}
+				+ '</span>'
+			);
+		</script>
+	</j:if>
+</j:jelly>]]></html>
+        <name>conversation</name>
+        <processing_script/>
+        <sys_class_name>sys_ui_page</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2023-07-25 06:45:58</sys_created_on>
+        <sys_id>a71bfc3c9758b110d70ef207f053af4e</sys_id>
+        <sys_mod_count>39</sys_mod_count>
+        <sys_name>conversation</sys_name>
+        <sys_package display_value="GPT" source="x_424426_gpt">2b808f2097d87110d70ef207f053afb4</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="GPT">2b808f2097d87110d70ef207f053afb4</sys_scope>
+        <sys_update_name>sys_ui_page_a71bfc3c9758b110d70ef207f053af4e</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2023-08-16 19:59:47</sys_updated_on>
+    </sys_ui_page>
+</record_update>

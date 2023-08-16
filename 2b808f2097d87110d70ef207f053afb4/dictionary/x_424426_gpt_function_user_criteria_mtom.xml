@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?><database>
+    <element attributes="update_synch=true" db_object_id="ebc457a097d0b110d70ef207f053afc8" extends="sys_metadata" label="Function Available For" max_length="40" name="x_424426_gpt_function_user_criteria_mtom" type="collection">
+        <element label="Available for" mandatory="true" max_length="32" name="available_for" reference="user_criteria" reference_cascade_rule="cascade" reference_qual="active=true^EQ" reference_qual_condition="active=true^EQ" type="reference"/>
+        <element label="Function" mandatory="true" max_length="32" name="function" reference="x_424426_gpt_function" reference_cascade_rule="cascade" reference_qual="active=true^EQ" reference_qual_condition="active=true^EQ" type="reference"/>
+        <index name="index">
+            <element name="available_for"/>
+        </index>
+        <index name="index2">
+            <element name="function"/>
+        </index>
+    </element>
+</database>

@@ -1,0 +1,833 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="DELETE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_424426_gpt.EMLToText</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <name>EMLToText</name>
+        <script><![CDATA[/* global Class, GlideSysAttachment, gs */
+/* eslint no-undef: "error" */
+var EMLToText = Class.create();
+EMLToText.FILE_HEADER = [-48, -49, 17, -32, -95, -79, 26, -31];
+EMLToText.UNUSED_BLOCK = -1;
+EMLToText.END_OF_CHAIN = -2;
+EMLToText.S_BIG_BLOCK_SIZE = 0x0200;
+EMLToText.S_BIG_BLOCK_MARK = 9;
+EMLToText.L_BIG_BLOCK_SIZE = 0x1000;
+EMLToText.L_BIG_BLOCK_MARK = 12;
+EMLToText.SMALL_BLOCK_SIZE = 0x0040;
+EMLToText.BIG_BLOCK_MIN_DOC_SIZE = 0x1000;
+EMLToText.HEADER = {
+	PROPERTY_START_OFFSET: 0x30,
+	BAT_START_OFFSET: 0x4c,
+	BAT_COUNT_OFFSET: 0x2C,
+	SBAT_START_OFFSET: 0x3C,
+	SBAT_COUNT_OFFSET: 0x40,
+	XBAT_START_OFFSET: 0x44,
+	XBAT_COUNT_OFFSET: 0x48
+};
+EMLToText.PROP = {
+	NO_INDEX: -1,
+	PROPERTY_SIZE: 0x0080,
+
+	NAME_SIZE_OFFSET: 0x40,
+	MAX_NAME_LENGTH: (/*NAME_SIZE_OFFSET*/0x40 / 2) - 1,
+	TYPE_OFFSET: 0x42,
+	PREVIOUS_PROPERTY_OFFSET: 0x44,
+	NEXT_PROPERTY_OFFSET: 0x48,
+	CHILD_PROPERTY_OFFSET: 0x4C,
+	START_BLOCK_OFFSET: 0x74,
+	SIZE_OFFSET: 0x78,
+	TYPE_ENUM: {
+		DIRECTORY: 1,
+		DOCUMENT: 2,
+		ROOT: 5
+	}
+};
+EMLToText.FIELD = {
+	PREFIX: {
+		ATTACHMENT: '__attach_version1.0',
+		RECIPIENT: '__recip_version1.0',
+		DOCUMENT: '__substg1.'
+	},
+	// example (use fields as needed)
+	NAME_MAPPING: {
+		// email specific
+		'0037': 'subject',
+		'0c1a': 'senderName',
+		'5d02': 'senderEmail',
+		'1000': 'body',
+		'1013': 'bodyHTML',
+		'007d': 'headers',
+		// attachment specific
+		'3703': 'extension',
+		'3704': 'fileNameShort',
+		'3707': 'fileName',
+		'3712': 'pidContentId',
+		'370e': 'mimeType',
+		// recipient specific
+		'3001': 'name',
+		'39fe': 'email'
+	},
+	CLASS_MAPPING: {
+		ATTACHMENT_DATA: '3701'
+	},
+	TYPE_MAPPING: {
+		'001e': 'string',
+		'001f': 'unicode',
+		'0102': 'binary'
+	},
+	DIR_TYPE: {
+		INNER_MSG: '000d'
+	}
+};
+EMLToText.prototype = {
+    initialize: function() {
+
+    },
+	
+	convert: function (attachmentGr) {
+		const byteArray = gs.base64Decode(new GlideSysAttachment().getContentBase64(attachmentGr));
+		const msgData = this._parseHeader(byteArray);
+		msgData.batData = this._batData(byteArray, msgData);
+		msgData.sbatData = this._sbatData(byteArray, msgData);
+		if (msgData.xbatCount > 0) {
+			this._xbatData(byteArray, msgData);
+		}
+		msgData.propertyData = this._propertyData(byteArray, msgData);
+		msgData.fieldsData = this._fieldsData(byteArray, msgData);
+
+		return msgData;
+	},
+	
+	// extract real fields
+	_fieldsData: function (byteArray, msgData) {
+		var fields = {
+			attachments: [],
+			recipients: []
+		};
+		this._fieldsDataDir(byteArray, msgData, msgData.propertyData[0], fields);
+		return fields;
+	},
+
+	_fieldsDataDir: function (byteArray, msgData, dirProperty, fields) {
+		if (dirProperty.children && dirProperty.children.length > 0) {
+			for (var i = 0; i < dirProperty.children.length; i++) {
+				var childProperty = msgData.propertyData[dirProperty.children[i]];
+
+				if (childProperty.type == EMLToText.PROP.TYPE_ENUM.DIRECTORY) {
+					this._fieldsDataDirInner(byteArray, msgData, childProperty, fields);
+				} else if (childProperty.type == EMLToText.PROP.TYPE_ENUM.DOCUMENT && childProperty.name.indexOf(EMLToText.FIELD.PREFIX.DOCUMENT) == 0) {
+					this._fieldsDataDocument(byteArray, msgData, childProperty, fields);
+				}
+			}
+		}
+	},
+	
+	_fieldsDataDocument: function (byteArray, msgData, documentProperty, fields) {
+		var value = documentProperty.name.substring(12).toLowerCase();
+		var fieldClass = value.substring(0, 4);
+		var fieldType = value.substring(4, 8);
+
+		var fieldName = EMLToText.FIELD.NAME_MAPPING[fieldClass];
+		var fieldTypeMapped = EMLToText.FIELD.TYPE_MAPPING[fieldType];
+
+		if (fieldName) {
+			var fieldValue = this._getFieldValue(byteArray, msgData, documentProperty, fieldTypeMapped);
+
+			if (this._isAddPropertyValue(fieldName, fieldTypeMapped)) {
+				fields[fieldName] = this._applyValueConverter(fieldName, fieldTypeMapped, fieldValue);
+			}
+		}
+		
+		if (fieldClass == EMLToText.FIELD.CLASS_MAPPING.ATTACHMENT_DATA) {
+			// attachment specific info
+			fields['dataId'] = documentProperty.index;
+			fields['contentLength'] = documentProperty.sizeBlock;
+		}
+	},
+	
+	_applyValueConverter: function (fieldName, fieldTypeMapped, fieldValue) {
+		if (fieldTypeMapped === 'binary' && fieldName === 'bodyHTML') {
+			return fieldValue;
+			//return convertUint8ArrayToString(fieldValue);
+		}
+		return fieldValue;
+	},
+	
+	_isAddPropertyValue:  function (fieldName, fieldTypeMapped) {
+		return fieldName !== 'body' || fieldTypeMapped !== 'binary';
+	},
+	
+	_fieldsDataDirInner: function (byteArray, msgData, dirProperty, fields) {
+		if (dirProperty.name.indexOf(EMLToText.FIELD.PREFIX.ATTACHMENT) == 0) {
+			// attachment
+			const attachmentField = {};
+			fields.attachments.push(attachmentField);
+			this._fieldsDataDir(byteArray, msgData, dirProperty, attachmentField);
+		} else if (dirProperty.name.indexOf(EMLToText.FIELD.PREFIX.RECIPIENT) == 0) {
+
+			// recipient
+			const recipientField = {};
+			fields.recipients.push(recipientField);
+			this._fieldsDataDir(byteArray, msgData, dirProperty, recipientField);
+		} else {
+
+			// other dir
+			const childFieldType = this._getFieldType(dirProperty);
+			if (childFieldType != EMLToText.FIELD.DIR_TYPE.INNER_MSG) {
+				this._fieldsDataDir(byteArray, msgData, dirProperty, fields);
+			} else {
+				// MSG as attachment currently isn't supported
+				fields.innerMsgContent = true;
+			}
+		}
+	},
+	
+	getFieldType: function (fieldProperty) {
+		var value = fieldProperty.name.substring(12).toLowerCase();
+		return value.substring(4, 8);
+	},
+	
+	// extract property data and property hierarchy
+	_propertyData: function (byteArray, msgData) {
+		var props = [];
+
+		var currentOffset = msgData.propertyStart;
+
+		while (currentOffset != EMLToText.END_OF_CHAIN) {
+			this._convertBlockToProperties(byteArray, msgData, currentOffset, props);
+			currentOffset = this._getNextBlock(byteArray, msgData, currentOffset);
+		}
+		this._createPropertyHierarchy(props, /*property with index 0 (zero) always as root*/props[0]);
+		return props;
+	},
+
+	_createPropertyHierarchy: function (props, nodeProperty) {
+		if (nodeProperty.childProperty == EMLToText.PROP.NO_INDEX) {
+			return;
+		}
+		nodeProperty.children = [];
+
+		var children = [nodeProperty.childProperty];
+		while (children.length != 0) {
+			var currentIndex = children.shift();
+			var current = props[currentIndex];
+			if (current == null) {
+				continue;
+			}
+			nodeProperty.children.push(currentIndex);
+
+			if (current.type == EMLToText.PROP.TYPE_ENUM.DIRECTORY) {
+				this._createPropertyHierarchy(props, current);
+			}
+			if (current.previousProperty != EMLToText.PROP.NO_INDEX) {
+				children.push(current.previousProperty);
+			}
+			if (current.nextProperty != EMLToText.PROP.NO_INDEX) {
+				children.push(current.nextProperty);
+			}
+		}
+	},
+	
+	_convertName: function (byteArray, offset) {
+		var nameLength = this._readShort(byteArray, offset + EMLToText.PROP.NAME_SIZE_OFFSET);
+		if (nameLength < 1) {
+			return '';
+		} else {
+			let sub = '';
+			for (let i = offset, length = offset + nameLength/2; i < length; i++) {
+				sub += byteArray[i];
+			}
+			return sub;
+		}
+	},
+	
+	_convertProperty: function (byteArray, index, offset) {
+		return {
+			index: index,
+			type: byteArray[offset + EMLToText.PROP.TYPE_OFFSET],
+			name: this._convertName(byteArray, offset),
+			// hierarchy
+			previousProperty: this._readInt(offset + EMLToText.PROP.PREVIOUS_PROPERTY_OFFSET),
+			nextProperty: this._readInt(offset + EMLToText.PROP.NEXT_PROPERTY_OFFSET),
+			childProperty: this._readInt(offset + EMLToText.PROP.CHILD_PROPERTY_OFFSET),
+			// data offset
+			startBlock: this._readInt(offset + EMLToText.PROP.START_BLOCK_OFFSET),
+			sizeBlock: this._readInt(offset + EMLToText.PROP.SIZE_OFFSET)
+		};
+	},
+	
+	_convertBlockToProperties: function (byteArray, msgData, propertyBlockOffset, props) {
+		var propertyCount = msgData.bigBlockSize / EMLToText.PROP.PROPERTY_SIZE;
+		var propertyOffset = this._getBlockOffsetAt(msgData, propertyBlockOffset);
+
+		for (var i = 0; i < propertyCount; i++) {
+			var propertyType = byteArray[propertyOffset + EMLToText.PROP.TYPE_OFFSET];
+			switch (propertyType) {
+				case EMLToText.PROP.TYPE_ENUM.ROOT:
+				case EMLToText.PROP.TYPE_ENUM.DIRECTORY:
+				case EMLToText.PROP.TYPE_ENUM.DOCUMENT:
+					props.push(this._convertProperty(byteArray, props.length, propertyOffset));
+					break;
+				default:
+					/* unknown property types */
+					props.push(null);
+			}
+
+			propertyOffset += EMLToText.PROP.PROPERTY_SIZE;
+		}
+	},
+	
+	_xbatData: function(byteArray, msgData) {
+		var batCount = this._batCountInHeader(msgData);
+		var batCountTotal = msgData.batCount;
+		var remainingBlocks = batCountTotal - batCount;
+
+		var nextBlockAt = msgData.xbatStart;
+		for (var i = 0; i < msgData.xbatCount; i++) {
+			var xBatBlock = this._getBlockAt(byteArray, msgData, nextBlockAt);
+			nextBlockAt = xBatBlock[msgData.xBlockLength];
+
+			var blocksToProcess = Math.min(remainingBlocks, msgData.xBlockLength);
+			for (var j = 0; j < blocksToProcess; j++) {
+				var blockStartAt = xBatBlock[j];
+				if (blockStartAt == EMLToText.UNUSED_BLOCK || blockStartAt == EMLToText.END_OF_CHAIN) {
+					break;
+				}
+				msgData.batData.push(blockStartAt);
+			}
+			remainingBlocks -= blocksToProcess;
+		}
+	},
+	
+	_sbatData: function (byteArray, msgData) {
+		const result = [];
+		let startIndex = msgData.sbatStart;
+
+		for (let i = 0; i < msgData.sbatCount && startIndex != EMLToText.END_OF_CHAIN; i++) {
+			result.push(startIndex);
+			startIndex = this._getNextBlock(byteArray, msgData, startIndex);
+		}
+		
+		return result;
+	},
+	
+	_getNextBlockInner: function (byteArray, msgData, offset, blockOffsetData) {
+		var currentBlock = Math.floor(offset / msgData.bigBlockLength);
+		var currentBlockIndex = offset % msgData.bigBlockLength;
+
+		var startBlockOffset = blockOffsetData[currentBlock];
+
+		return this._getBlockAt(byteArray, msgData, startBlockOffset)[currentBlockIndex];
+	},
+	
+	_getBlockOffsetAt: function (msgData, offset) {
+		return (offset + 1) * msgData.bigBlockSize;
+	},
+	
+	_getBlockAt: function (byteArray, msgData, offset) {
+		const startOffset = this._getBlockOffsetAt(msgData, offset);
+		const integers = [];
+		for (let i = 0; i < msgData.bigBlockLength; i++) {
+			integers.push(this._readInt(byteArray, startOffset + (i * 4)));
+		}
+		
+		return integers;
+	},
+	
+	getNextBlock: function (byteArray, msgData, offset) {
+		return this._getNextBlockInner(byteArray, msgData, offset, msgData.batData);
+	},
+	
+	_batData: function (byteArray, msgData) {
+		const result = new Array(batCountInHeader(msgData));
+		const offset = EMLToText.HEADER.BAT_START_OFFSET;
+		for (let i = 0; i < result.length; i++) {
+			result[i] = this._readInt(offset + (i * 4));
+		}
+		
+		return result;
+
+		function batCountInHeader(msgData) {
+			const maxBatsInHeader = (EMLToText.S_BIG_BLOCK_SIZE - EMLToText.HEADER.BAT_START_OFFSET) / 4;
+			return Math.min(msgData.batCount, maxBatsInHeader);
+		}
+	},
+	
+	_parseHeader: function (content) {
+		const headerData = {};
+		
+		// system data
+		headerData.bigBlockSize = content[30] == EMLToText.L_BIG_BLOCK_MARK ? EMLToText.L_BIG_BLOCK_SIZE : EMLToText.S_BIG_BLOCK_SIZE;
+		headerData.bigBlockLength = headerData.bigBlockSize / 4;
+		headerData.xBlockLength = headerData.bigBlockLength - 1;
+		
+		// header data
+		headerData.batCount = this._readInt(content, EMLToText.HEADER.BAT_COUNT_OFFSET);
+		headerData.propertyStart = this._readInt(content, EMLToText.HEADER.PROPERTY_START_OFFSET);
+		headerData.sbatStart = this._readInt(content, EMLToText.HEADER.SBAT_START_OFFSET);
+		headerData.sbatCount = this._readInt(content, EMLToText.HEADER.SBAT_COUNT_OFFSET);
+		headerData.xbatStart = this._readInt(content, EMLToText.HEADER.XBAT_START_OFFSET);
+		headerData.xbatCount = this._readInt(content, EMLToText.HEADER.XBAT_COUNT_OFFSET);
+
+		return headerData;
+	},
+	
+	_readInt: function (byteArray, pos) {
+		const intValue = (byteArray[pos] & 0xFF) |
+			((byteArray[pos + 1] & 0xFF) << 8) |
+			((byteArray[pos + 2] & 0xFF) << 16) |
+			((byteArray[pos + 3] & 0xFF) << 24);
+	},
+	
+	_readShort: function (byteArray, pos) {
+		const intValue = (byteArray[pos] & 0xFF) |
+			((byteArray[pos + 1] & 0xFF) << 8);
+	},
+
+    type: 'EMLToText'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2023-07-27 21:22:29</sys_created_on>
+        <sys_id>5575c91597d83510d70ef207f053afb5</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>EMLToText</sys_name>
+        <sys_package display_value="GPT" source="x_424426_gpt">2b808f2097d87110d70ef207f053afb4</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="GPT">2b808f2097d87110d70ef207f053afb4</sys_scope>
+        <sys_update_name>sys_script_include_5575c91597d83510d70ef207f053afb5</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2023-07-27 21:22:29</sys_updated_on>
+    </sys_script_include>
+    <sys_update_version action="INSERT_OR_UPDATE">
+        <action>DELETE</action>
+        <application display_value="GPT">2b808f2097d87110d70ef207f053afb4</application>
+        <file_path/>
+        <instance_id>071f9d4fdb9a159c3050ac44d496190e</instance_id>
+        <instance_name>dev139763</instance_name>
+        <name>sys_script_include_5575c91597d83510d70ef207f053afb5</name>
+        <payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;record_update table="sys_script_include"&gt;&lt;sys_script_include action="INSERT_OR_UPDATE"&gt;&lt;access&gt;package_private&lt;/access&gt;&lt;active&gt;true&lt;/active&gt;&lt;api_name&gt;x_424426_gpt.EMLToText&lt;/api_name&gt;&lt;caller_access/&gt;&lt;client_callable&gt;false&lt;/client_callable&gt;&lt;description/&gt;&lt;name&gt;EMLToText&lt;/name&gt;&lt;script&gt;&lt;![CDATA[/* global Class, GlideSysAttachment, gs */
+/* eslint no-undef: "error" */
+var EMLToText = Class.create();
+EMLToText.FILE_HEADER = [-48, -49, 17, -32, -95, -79, 26, -31];
+EMLToText.UNUSED_BLOCK = -1;
+EMLToText.END_OF_CHAIN = -2;
+EMLToText.S_BIG_BLOCK_SIZE = 0x0200;
+EMLToText.S_BIG_BLOCK_MARK = 9;
+EMLToText.L_BIG_BLOCK_SIZE = 0x1000;
+EMLToText.L_BIG_BLOCK_MARK = 12;
+EMLToText.SMALL_BLOCK_SIZE = 0x0040;
+EMLToText.BIG_BLOCK_MIN_DOC_SIZE = 0x1000;
+EMLToText.HEADER = {
+	PROPERTY_START_OFFSET: 0x30,
+	BAT_START_OFFSET: 0x4c,
+	BAT_COUNT_OFFSET: 0x2C,
+	SBAT_START_OFFSET: 0x3C,
+	SBAT_COUNT_OFFSET: 0x40,
+	XBAT_START_OFFSET: 0x44,
+	XBAT_COUNT_OFFSET: 0x48
+};
+EMLToText.PROP = {
+	NO_INDEX: -1,
+	PROPERTY_SIZE: 0x0080,
+
+	NAME_SIZE_OFFSET: 0x40,
+	MAX_NAME_LENGTH: (/*NAME_SIZE_OFFSET*/0x40 / 2) - 1,
+	TYPE_OFFSET: 0x42,
+	PREVIOUS_PROPERTY_OFFSET: 0x44,
+	NEXT_PROPERTY_OFFSET: 0x48,
+	CHILD_PROPERTY_OFFSET: 0x4C,
+	START_BLOCK_OFFSET: 0x74,
+	SIZE_OFFSET: 0x78,
+	TYPE_ENUM: {
+		DIRECTORY: 1,
+		DOCUMENT: 2,
+		ROOT: 5
+	}
+};
+EMLToText.FIELD = {
+	PREFIX: {
+		ATTACHMENT: '__attach_version1.0',
+		RECIPIENT: '__recip_version1.0',
+		DOCUMENT: '__substg1.'
+	},
+	// example (use fields as needed)
+	NAME_MAPPING: {
+		// email specific
+		'0037': 'subject',
+		'0c1a': 'senderName',
+		'5d02': 'senderEmail',
+		'1000': 'body',
+		'1013': 'bodyHTML',
+		'007d': 'headers',
+		// attachment specific
+		'3703': 'extension',
+		'3704': 'fileNameShort',
+		'3707': 'fileName',
+		'3712': 'pidContentId',
+		'370e': 'mimeType',
+		// recipient specific
+		'3001': 'name',
+		'39fe': 'email'
+	},
+	CLASS_MAPPING: {
+		ATTACHMENT_DATA: '3701'
+	},
+	TYPE_MAPPING: {
+		'001e': 'string',
+		'001f': 'unicode',
+		'0102': 'binary'
+	},
+	DIR_TYPE: {
+		INNER_MSG: '000d'
+	}
+};
+EMLToText.prototype = {
+    initialize: function() {
+
+    },
+	
+	convert: function (attachmentGr) {
+		const byteArray = gs.base64Decode(new GlideSysAttachment().getContentBase64(attachmentGr));
+		const msgData = this._parseHeader(byteArray);
+		msgData.batData = this._batData(byteArray, msgData);
+		msgData.sbatData = this._sbatData(byteArray, msgData);
+		if (msgData.xbatCount &gt; 0) {
+			this._xbatData(byteArray, msgData);
+		}
+		msgData.propertyData = this._propertyData(byteArray, msgData);
+		msgData.fieldsData = this._fieldsData(byteArray, msgData);
+
+		return msgData;
+	},
+	
+	// extract real fields
+	_fieldsData: function (byteArray, msgData) {
+		var fields = {
+			attachments: [],
+			recipients: []
+		};
+		this._fieldsDataDir(byteArray, msgData, msgData.propertyData[0], fields);
+		return fields;
+	},
+
+	_fieldsDataDir: function (byteArray, msgData, dirProperty, fields) {
+		if (dirProperty.children &amp;&amp; dirProperty.children.length &gt; 0) {
+			for (var i = 0; i &lt; dirProperty.children.length; i++) {
+				var childProperty = msgData.propertyData[dirProperty.children[i]];
+
+				if (childProperty.type == EMLToText.PROP.TYPE_ENUM.DIRECTORY) {
+					this._fieldsDataDirInner(byteArray, msgData, childProperty, fields);
+				} else if (childProperty.type == EMLToText.PROP.TYPE_ENUM.DOCUMENT &amp;&amp; childProperty.name.indexOf(EMLToText.FIELD.PREFIX.DOCUMENT) == 0) {
+					this._fieldsDataDocument(byteArray, msgData, childProperty, fields);
+				}
+			}
+		}
+	},
+	
+	_fieldsDataDocument: function (byteArray, msgData, documentProperty, fields) {
+		var value = documentProperty.name.substring(12).toLowerCase();
+		var fieldClass = value.substring(0, 4);
+		var fieldType = value.substring(4, 8);
+
+		var fieldName = EMLToText.FIELD.NAME_MAPPING[fieldClass];
+		var fieldTypeMapped = EMLToText.FIELD.TYPE_MAPPING[fieldType];
+
+		if (fieldName) {
+			var fieldValue = this._getFieldValue(byteArray, msgData, documentProperty, fieldTypeMapped);
+
+			if (this._isAddPropertyValue(fieldName, fieldTypeMapped)) {
+				fields[fieldName] = this._applyValueConverter(fieldName, fieldTypeMapped, fieldValue);
+			}
+		}
+		
+		if (fieldClass == EMLToText.FIELD.CLASS_MAPPING.ATTACHMENT_DATA) {
+			// attachment specific info
+			fields['dataId'] = documentProperty.index;
+			fields['contentLength'] = documentProperty.sizeBlock;
+		}
+	},
+	
+	_applyValueConverter: function (fieldName, fieldTypeMapped, fieldValue) {
+		if (fieldTypeMapped === 'binary' &amp;&amp; fieldName === 'bodyHTML') {
+			return fieldValue;
+			//return convertUint8ArrayToString(fieldValue);
+		}
+		return fieldValue;
+	},
+	
+	_isAddPropertyValue:  function (fieldName, fieldTypeMapped) {
+		return fieldName !== 'body' || fieldTypeMapped !== 'binary';
+	},
+	
+	_fieldsDataDirInner: function (byteArray, msgData, dirProperty, fields) {
+		if (dirProperty.name.indexOf(EMLToText.FIELD.PREFIX.ATTACHMENT) == 0) {
+			// attachment
+			const attachmentField = {};
+			fields.attachments.push(attachmentField);
+			this._fieldsDataDir(byteArray, msgData, dirProperty, attachmentField);
+		} else if (dirProperty.name.indexOf(EMLToText.FIELD.PREFIX.RECIPIENT) == 0) {
+
+			// recipient
+			const recipientField = {};
+			fields.recipients.push(recipientField);
+			this._fieldsDataDir(byteArray, msgData, dirProperty, recipientField);
+		} else {
+
+			// other dir
+			const childFieldType = this._getFieldType(dirProperty);
+			if (childFieldType != EMLToText.FIELD.DIR_TYPE.INNER_MSG) {
+				this._fieldsDataDir(byteArray, msgData, dirProperty, fields);
+			} else {
+				// MSG as attachment currently isn't supported
+				fields.innerMsgContent = true;
+			}
+		}
+	},
+	
+	getFieldType: function (fieldProperty) {
+		var value = fieldProperty.name.substring(12).toLowerCase();
+		return value.substring(4, 8);
+	},
+	
+	// extract property data and property hierarchy
+	_propertyData: function (byteArray, msgData) {
+		var props = [];
+
+		var currentOffset = msgData.propertyStart;
+
+		while (currentOffset != EMLToText.END_OF_CHAIN) {
+			this._convertBlockToProperties(byteArray, msgData, currentOffset, props);
+			currentOffset = this._getNextBlock(byteArray, msgData, currentOffset);
+		}
+		this._createPropertyHierarchy(props, /*property with index 0 (zero) always as root*/props[0]);
+		return props;
+	},
+
+	_createPropertyHierarchy: function (props, nodeProperty) {
+		if (nodeProperty.childProperty == EMLToText.PROP.NO_INDEX) {
+			return;
+		}
+		nodeProperty.children = [];
+
+		var children = [nodeProperty.childProperty];
+		while (children.length != 0) {
+			var currentIndex = children.shift();
+			var current = props[currentIndex];
+			if (current == null) {
+				continue;
+			}
+			nodeProperty.children.push(currentIndex);
+
+			if (current.type == EMLToText.PROP.TYPE_ENUM.DIRECTORY) {
+				this._createPropertyHierarchy(props, current);
+			}
+			if (current.previousProperty != EMLToText.PROP.NO_INDEX) {
+				children.push(current.previousProperty);
+			}
+			if (current.nextProperty != EMLToText.PROP.NO_INDEX) {
+				children.push(current.nextProperty);
+			}
+		}
+	},
+	
+	_convertName: function (byteArray, offset) {
+		var nameLength = this._readShort(byteArray, offset + EMLToText.PROP.NAME_SIZE_OFFSET);
+		if (nameLength &lt; 1) {
+			return '';
+		} else {
+			let sub = '';
+			for (let i = offset, length = offset + nameLength/2; i &lt; length; i++) {
+				sub += byteArray[i];
+			}
+			return sub;
+		}
+	},
+	
+	_convertProperty: function (byteArray, index, offset) {
+		return {
+			index: index,
+			type: byteArray[offset + EMLToText.PROP.TYPE_OFFSET],
+			name: this._convertName(byteArray, offset),
+			// hierarchy
+			previousProperty: this._readInt(offset + EMLToText.PROP.PREVIOUS_PROPERTY_OFFSET),
+			nextProperty: this._readInt(offset + EMLToText.PROP.NEXT_PROPERTY_OFFSET),
+			childProperty: this._readInt(offset + EMLToText.PROP.CHILD_PROPERTY_OFFSET),
+			// data offset
+			startBlock: this._readInt(offset + EMLToText.PROP.START_BLOCK_OFFSET),
+			sizeBlock: this._readInt(offset + EMLToText.PROP.SIZE_OFFSET)
+		};
+	},
+	
+	_convertBlockToProperties: function (byteArray, msgData, propertyBlockOffset, props) {
+		var propertyCount = msgData.bigBlockSize / EMLToText.PROP.PROPERTY_SIZE;
+		var propertyOffset = this._getBlockOffsetAt(msgData, propertyBlockOffset);
+
+		for (var i = 0; i &lt; propertyCount; i++) {
+			var propertyType = byteArray[propertyOffset + EMLToText.PROP.TYPE_OFFSET];
+			switch (propertyType) {
+				case EMLToText.PROP.TYPE_ENUM.ROOT:
+				case EMLToText.PROP.TYPE_ENUM.DIRECTORY:
+				case EMLToText.PROP.TYPE_ENUM.DOCUMENT:
+					props.push(this._convertProperty(byteArray, props.length, propertyOffset));
+					break;
+				default:
+					/* unknown property types */
+					props.push(null);
+			}
+
+			propertyOffset += EMLToText.PROP.PROPERTY_SIZE;
+		}
+	},
+	
+	_xbatData: function(byteArray, msgData) {
+		var batCount = this._batCountInHeader(msgData);
+		var batCountTotal = msgData.batCount;
+		var remainingBlocks = batCountTotal - batCount;
+
+		var nextBlockAt = msgData.xbatStart;
+		for (var i = 0; i &lt; msgData.xbatCount; i++) {
+			var xBatBlock = this._getBlockAt(byteArray, msgData, nextBlockAt);
+			nextBlockAt = xBatBlock[msgData.xBlockLength];
+
+			var blocksToProcess = Math.min(remainingBlocks, msgData.xBlockLength);
+			for (var j = 0; j &lt; blocksToProcess; j++) {
+				var blockStartAt = xBatBlock[j];
+				if (blockStartAt == EMLToText.UNUSED_BLOCK || blockStartAt == EMLToText.END_OF_CHAIN) {
+					break;
+				}
+				msgData.batData.push(blockStartAt);
+			}
+			remainingBlocks -= blocksToProcess;
+		}
+	},
+	
+	_sbatData: function (byteArray, msgData) {
+		const result = [];
+		let startIndex = msgData.sbatStart;
+
+		for (let i = 0; i &lt; msgData.sbatCount &amp;&amp; startIndex != EMLToText.END_OF_CHAIN; i++) {
+			result.push(startIndex);
+			startIndex = this._getNextBlock(byteArray, msgData, startIndex);
+		}
+		
+		return result;
+	},
+	
+	_getNextBlockInner: function (byteArray, msgData, offset, blockOffsetData) {
+		var currentBlock = Math.floor(offset / msgData.bigBlockLength);
+		var currentBlockIndex = offset % msgData.bigBlockLength;
+
+		var startBlockOffset = blockOffsetData[currentBlock];
+
+		return this._getBlockAt(byteArray, msgData, startBlockOffset)[currentBlockIndex];
+	},
+	
+	_getBlockOffsetAt: function (msgData, offset) {
+		return (offset + 1) * msgData.bigBlockSize;
+	},
+	
+	_getBlockAt: function (byteArray, msgData, offset) {
+		const startOffset = this._getBlockOffsetAt(msgData, offset);
+		const integers = [];
+		for (let i = 0; i &lt; msgData.bigBlockLength; i++) {
+			integers.push(this._readInt(byteArray, startOffset + (i * 4)));
+		}
+		
+		return integers;
+	},
+	
+	getNextBlock: function (byteArray, msgData, offset) {
+		return this._getNextBlockInner(byteArray, msgData, offset, msgData.batData);
+	},
+	
+	_batData: function (byteArray, msgData) {
+		const result = new Array(batCountInHeader(msgData));
+		const offset = EMLToText.HEADER.BAT_START_OFFSET;
+		for (let i = 0; i &lt; result.length; i++) {
+			result[i] = this._readInt(offset + (i * 4));
+		}
+		
+		return result;
+
+		function batCountInHeader(msgData) {
+			const maxBatsInHeader = (EMLToText.S_BIG_BLOCK_SIZE - EMLToText.HEADER.BAT_START_OFFSET) / 4;
+			return Math.min(msgData.batCount, maxBatsInHeader);
+		}
+	},
+	
+	_parseHeader: function (content) {
+		const headerData = {};
+		
+		// system data
+		headerData.bigBlockSize = content[30] == EMLToText.L_BIG_BLOCK_MARK ? EMLToText.L_BIG_BLOCK_SIZE : EMLToText.S_BIG_BLOCK_SIZE;
+		headerData.bigBlockLength = headerData.bigBlockSize / 4;
+		headerData.xBlockLength = headerData.bigBlockLength - 1;
+		
+		// header data
+		headerData.batCount = this._readInt(content, EMLToText.HEADER.BAT_COUNT_OFFSET);
+		headerData.propertyStart = this._readInt(content, EMLToText.HEADER.PROPERTY_START_OFFSET);
+		headerData.sbatStart = this._readInt(content, EMLToText.HEADER.SBAT_START_OFFSET);
+		headerData.sbatCount = this._readInt(content, EMLToText.HEADER.SBAT_COUNT_OFFSET);
+		headerData.xbatStart = this._readInt(content, EMLToText.HEADER.XBAT_START_OFFSET);
+		headerData.xbatCount = this._readInt(content, EMLToText.HEADER.XBAT_COUNT_OFFSET);
+
+		return headerData;
+	},
+	
+	_readInt: function (byteArray, pos) {
+		const intValue = (byteArray[pos] &amp; 0xFF) |
+			((byteArray[pos + 1] &amp; 0xFF) &lt;&lt; 8) |
+			((byteArray[pos + 2] &amp; 0xFF) &lt;&lt; 16) |
+			((byteArray[pos + 3] &amp; 0xFF) &lt;&lt; 24);
+	},
+	
+	_readShort: function (byteArray, pos) {
+		const intValue = (byteArray[pos] &amp; 0xFF) |
+			((byteArray[pos + 1] &amp; 0xFF) &lt;&lt; 8);
+	},
+
+    type: 'EMLToText'
+};]]&gt;&lt;/script&gt;&lt;sys_class_name&gt;sys_script_include&lt;/sys_class_name&gt;&lt;sys_created_by&gt;admin&lt;/sys_created_by&gt;&lt;sys_created_on&gt;2023-07-27 21:22:29&lt;/sys_created_on&gt;&lt;sys_id&gt;5575c91597d83510d70ef207f053afb5&lt;/sys_id&gt;&lt;sys_mod_count&gt;0&lt;/sys_mod_count&gt;&lt;sys_name&gt;EMLToText&lt;/sys_name&gt;&lt;sys_package display_value="GPT" source="x_424426_gpt"&gt;2b808f2097d87110d70ef207f053afb4&lt;/sys_package&gt;&lt;sys_policy&gt;read&lt;/sys_policy&gt;&lt;sys_scope display_value="GPT"&gt;2b808f2097d87110d70ef207f053afb4&lt;/sys_scope&gt;&lt;sys_update_name&gt;sys_script_include_5575c91597d83510d70ef207f053afb5&lt;/sys_update_name&gt;&lt;sys_updated_by&gt;admin&lt;/sys_updated_by&gt;&lt;sys_updated_on&gt;2023-07-27 21:22:29&lt;/sys_updated_on&gt;&lt;/sys_script_include&gt;&lt;/record_update&gt;</payload>
+        <payload_hash>1867566557</payload_hash>
+        <record_name>EMLToText</record_name>
+        <reverted_from/>
+        <source>2b808f2097d87110d70ef207f053afb6</source>
+        <source_table>sys_update_set</source_table>
+        <state>previous</state>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2023-07-27 21:22:29</sys_created_on>
+        <sys_id>76e652ed97983110d70ef207f053afc2</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_recorded_at>189993b54c40000001</sys_recorded_at>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2023-07-27 21:22:29</sys_updated_on>
+        <type>Script Include</type>
+        <update_guid>3ae652edce983110d695cf50d007ffc1</update_guid>
+        <update_guid_history>3ae652edce983110d695cf50d007ffc1:1867566557</update_guid_history>
+    </sys_update_version>
+    <sys_metadata_delete action="INSERT_OR_UPDATE">
+        <sys_audit_delete/>
+        <sys_class_name>sys_metadata_delete</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2023-07-27 21:26:45</sys_created_on>
+        <sys_db_object display_value="" name="sys_script_include">sys_script_include</sys_db_object>
+        <sys_id>3b6bd284cd0145739d576bdaf69ec0a9</sys_id>
+        <sys_metadata>5575c91597d83510d70ef207f053afb5</sys_metadata>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>EMLToText</sys_name>
+        <sys_package display_value="GPT" source="x_424426_gpt">2b808f2097d87110d70ef207f053afb4</sys_package>
+        <sys_parent/>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="GPT">2b808f2097d87110d70ef207f053afb4</sys_scope>
+        <sys_scope_delete display_value="">5cbb0aab52db4cf6abefe2d49afc3869</sys_scope_delete>
+        <sys_update_name>sys_script_include_5575c91597d83510d70ef207f053afb5</sys_update_name>
+        <sys_update_version display_value="sys_script_include_5575c91597d83510d70ef207f053afb5">76e652ed97983110d70ef207f053afc2</sys_update_version>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2023-07-27 21:26:45</sys_updated_on>
+    </sys_metadata_delete>
+</record_update>

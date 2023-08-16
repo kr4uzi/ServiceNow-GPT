@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="x_424426_gpt_function">
+    <x_424426_gpt_function action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <description>Returns all users which match the given name. A JSON array representing the matching user record is returned (User Name, Email, Company, Manager).</description>
+        <name>get_users_by_name</name>
+        <run_at>server</run_at>
+        <script><![CDATA[/* global GlideRecordSecure, name */
+/* eslint no-undef: "error" */
+(function (name) {
+	name = name.trim();
+	
+	const userGr = new GlideRecordSecure('sys_user');
+	userGr.addQuery('name', 'CONTAINS', name);
+	userGr.query();
+	
+	const users = [];
+	while (userGr.next()) {
+		users.push({
+			sys_id: userGr.getUniqueValue(),
+			user_name: userGr.user_name.toString(),
+			email: userGr.email.toString(),
+			manager: userGr.getDisplayValue('manager')
+		});
+	}
+	
+	return JSON.stringify(users);
+})(name);]]></script>
+        <sys_class_name>x_424426_gpt_function</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2023-07-26 19:11:58</sys_created_on>
+        <sys_id>a1cda85997583510d70ef207f053af33</sys_id>
+        <sys_mod_count>1</sys_mod_count>
+        <sys_name>get_users_by_name</sys_name>
+        <sys_package display_value="GPT" source="x_424426_gpt">2b808f2097d87110d70ef207f053afb4</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="GPT">2b808f2097d87110d70ef207f053afb4</sys_scope>
+        <sys_update_name>x_424426_gpt_function_a1cda85997583510d70ef207f053af33</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2023-07-26 19:13:20</sys_updated_on>
+    </x_424426_gpt_function>
+</record_update>

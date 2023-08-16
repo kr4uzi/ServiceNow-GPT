@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="ecc_agent_script_include">
+    <ecc_agent_script_include action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <description/>
+        <name>GPTProcessExecutor</name>
+        <script><![CDATA[var GPTProcessExecutor = Class.create();
+GPTProcessExecutor.prototype = {
+    initialize: function (/* ...args */) {
+        this.setTimeout(30, 's');
+
+        var String = Packages.java.lang.String;
+		var Arrays = Packages.java.util.Arrays;
+		
+		var args = (arguments.length >= 1 && typeof arguments[0] == 'string') ? arguments
+			: (arguments.length == 1 && arguments[0] instanceof Array) ? arguments[0]
+			: [];
+		
+		this.command = Packages.java.lang.reflect.Array.newInstance(String, args.length);
+		this.command = Arrays.asList(this.command);
+		for (var i = 0; i < args.length; i++) {
+			this.command.set(i, new String(args[i]));
+		}
+    },
+
+    setTimeout: function (timeout, unit) {
+        unit = unit || 's';
+
+        var TimeUnit = Packages.java.util.concurrent.TimeUnit;
+        switch (unit) {
+            case 'ms': this.timeunit = TimeUnit.MILLISECONDS; break;
+            case 's': this.timeunit = TimeUnit.SECONDS; break;
+            case 'm': this.timeunit = TimeUnit.MINUTES; break;
+            default: return;
+        }
+
+        this.timeout = timeout;
+    },
+
+    exec: function () {
+		if (this.command.size()) {
+			var ProcessBuilder = Packages.java.lang.ProcessBuilder;
+			var File = Packages.java.io.File;
+			var FileInputStream = Packages.java.io.FileInputStream;
+			var JavaString = Packages.java.lang.String;
+			
+			var stdoutFile = File.createTempFile('stdout', '.txt');
+			var stderrFile = File.createTempFile('stderr', '.txt');
+			
+			try {
+				var p = new ProcessBuilder(this.command)
+					.redirectOutput(stdoutFile)
+					.redirectError(stderrFile)
+					.start();
+				
+				p.waitFor(this.timeout, this.timeunit);
+				var stdout = this._readLines(new FileInputStream(stdoutFile));
+				var stderr = this._readLines(new FileInputStream(stderrFile));
+				
+				return {
+					valid: true,
+					exitCode: p.exitValue(),
+					stdout: stdout.join('\n'),
+					stderr: stderr.join('\n')
+				};
+			} catch (e) {
+				//ms.log('exec: Exception occurred: ' + e.message);
+				throw e;
+			} finally {
+				stdoutFile['delete']();
+				stderrFile['delete']();
+			}
+		}
+		
+		return {
+			valid: false,
+			exitCode: -1,
+			stdout: '',
+			stderr: ''
+		};
+    },
+    
+    _readLines: function (stream) {
+        var InputStreamReader = Packages.java.io.InputStreamReader;
+        var BufferedReader = Packages.java.io.BufferedReader;
+        var is = new BufferedReader(new InputStreamReader(stream));
+        var line;
+		var output = [];
+		while ((line = is.readLine()) != null) {
+			output.push(line);
+        }
+        
+        is.close();
+        return output;
+    },
+
+    type: 'GPTProcessExecutor'
+};]]></script>
+        <sys_class_name>ecc_agent_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2023-07-29 14:22:02</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>7949c70a97d07110d70ef207f053af10</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>GPTProcessExecutor</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="GPT" source="x_424426_gpt">2b808f2097d87110d70ef207f053afb4</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="GPT">2b808f2097d87110d70ef207f053afb4</sys_scope>
+        <sys_update_name>ecc_agent_script_include_7949c70a97d07110d70ef207f053af10</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2023-07-29 14:22:02</sys_updated_on>
+    </ecc_agent_script_include>
+</record_update>

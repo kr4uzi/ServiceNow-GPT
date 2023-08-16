@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_424426_gpt.NLUService</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <name>NLUService</name>
+        <script><![CDATA[class NLUService extends ScopedHttpNLUService {
+	static #DRIVER_SYS_ID = "2138a14b9760f110d70ef207f053aff3";
+
+	constructor() {
+		super();
+	}
+
+	preparePredictRequestBody(utterance, modelId, glideLanguageCode) {
+		let dfLanguageCode;
+		if (!gs.nil(glideLanguageCode)) {
+			dfLanguageCode = glideLanguageCode; 
+			var langGr = new GlideRecord('open_nlu_driver_language');
+			langGr.addQuery("driver", NLUService.#DRIVER_SYS_ID);
+			langGr.addQuery("code", glideLanguageCode);
+			langGr.query();
+			if (langGr.next()) {
+				dfLanguageCode = langGr.driver_codes.toString().split(",")[0];
+			}
+		}
+		
+		return JSON.stringify(
+			{
+				"queryInput": {
+					"text": {
+						"languageCode": dfLanguageCode,
+						"text": utterance
+					}
+				}
+			});		
+	}
+}]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2023-08-13 20:34:12</sys_created_on>
+        <sys_id>0cbda58f9760f110d70ef207f053afcc</sys_id>
+        <sys_mod_count>3</sys_mod_count>
+        <sys_name>NLUService</sys_name>
+        <sys_package display_value="GPT" source="x_424426_gpt">2b808f2097d87110d70ef207f053afb4</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="GPT">2b808f2097d87110d70ef207f053afb4</sys_scope>
+        <sys_update_name>sys_script_include_0cbda58f9760f110d70ef207f053afcc</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2023-08-13 21:17:23</sys_updated_on>
+    </sys_script_include>
+</record_update>

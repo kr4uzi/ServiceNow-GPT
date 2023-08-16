@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update>
+    <sys_documentation element="model" label="Language Model" language="en" table="var__m_connection_attributes_18a04fac9710b110d70ef207f053af4c">
+        <sys_documentation action="INSERT_OR_UPDATE">
+            <element>model</element>
+            <help/>
+            <hint/>
+            <label>Language Model</label>
+            <language>en</language>
+            <name>var__m_connection_attributes_18a04fac9710b110d70ef207f053af4c</name>
+            <plural>Language Model</plural>
+            <sys_class_name>sys_documentation</sys_class_name>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2023-07-24 21:58:18</sys_created_on>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_name>Language Model</sys_name>
+            <sys_package display_value="GPT" source="x_424426_gpt">2b808f2097d87110d70ef207f053afb4</sys_package>
+            <sys_policy/>
+            <sys_scope display_value="GPT">2b808f2097d87110d70ef207f053afb4</sys_scope>
+            <sys_update_name>sys_documentation_var__m_connection_attributes_18a04fac9710b110d70ef207f053af4c_model_en</sys_update_name>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2023-07-24 21:58:18</sys_updated_on>
+            <url/>
+            <url_target/>
+        </sys_documentation>
+    </sys_documentation>
+</record_update>

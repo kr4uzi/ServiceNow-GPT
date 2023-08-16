@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?><database>
+    <element attributes="update_synch=true" db_object_id="7cca4f689750b110d70ef207f053affa" extends="sys_metadata" label="Function" max_length="40" name="x_424426_gpt_function" type="collection">
+        <element default="true" label="Active" max_length="40" name="active" type="boolean"/>
+        <element label="Description" max_length="1000" name="description" type="string"/>
+        <element label="Name" max_length="64" name="name" type="string"/>
+        <element choice="1" default="server" label="Run at" max_length="40" name="run_at" type="choice">
+            <choice>
+                <element inactive_on_update="false" label="Server" sequence="10" value="server"/>
+                <element inactive_on_update="false" label="Client" sequence="20" value="client"/>
+            </choice>
+        </element>
+        <element label="Script" max_length="8000" name="script" type="script"/>
+    </element>
+</database>

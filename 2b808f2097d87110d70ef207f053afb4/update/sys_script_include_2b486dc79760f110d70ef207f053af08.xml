@@ -1,0 +1,249 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_424426_gpt.ScopedHttpNLUService</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <name>ScopedHttpNLUService</name>
+        <script><![CDATA[/* global gs, GlideRecord, GlideScriptedExtensionPoint */
+/* eslint no-undef: "error" */
+class ScopedHttpNLUService {
+	constructor() {
+		this._loadDriver();
+		this._loadConnectionConfigs();
+	}
+
+	getConnectionAttributeMap() {
+		return this._connectionAttributesMap;
+	}
+
+	getAdapter() {
+		return this._adapter;
+	}
+
+	getModelsConnectionInfos() {
+		return this._getHttpConnectionInfos("models");
+	}
+
+	getModelIntentsConnectionInfos(modelId) {
+		return this._getHttpConnectionInfos("intents", modelId);
+	}
+
+	/**
+	 * Returns the identity of a model from the model id and model label.
+	 *
+	 * @param modelId the id of the model
+	 * @param modelLabel the label of the model
+	 * @return the identity
+	 */
+	getModelIdentity(modelId, modelLabel) {
+		return !gs.nil(modelLabel) ? modelLabel : modelId;
+	}
+
+	/**
+	 * Returns the identity of a predicted intent from the intent id and intent label.
+	 *
+	 * @param intentId the id of the intent
+	 * @param intentLabel the label of the intent
+	 * @return the identity
+	 */
+	getPredictedIntentIdentity(intentId, intentLabel) {
+		return intentId;
+	}
+
+	/**
+	 * Returns the identity of a predicted entity from the entity id and entity label.
+	 *
+	 * @param entityId the id of the entity
+	 * @param entityLabel the label of the entity
+	 * @return the identity
+	 */
+	getPredictedEntityIdentity(entityId, entityLabel) {
+		return entityId;
+	}
+
+	getModelEntitiesConnectionInfos(modelId) {
+		return this._getHttpConnectionInfos("entities", modelId);
+	}
+
+	getPredictConnectionInfos(modelId, utterance) {
+		return this._getHttpConnectionInfos("prediction", modelId);
+	}
+
+	preparePredictRequestBody(utterance) {
+		// inheritors must implement this
+	}
+
+	adaptProviderModels(modelsJSON) {
+		return this.getAdapter().toModels(JSON.parse(modelsJSON));
+	}
+
+	adaptProviderModelIntents(modelId, modelIntentsJSON) {
+		return this.getAdapter().toModelIntents(modelId, JSON.parse(modelIntentsJSON));
+	}
+
+	adaptProviderModelEntities(modelId, modelEntitiesJSON) {
+		return this.getAdapter().toModelEntities(modelId, JSON.parse(modelEntitiesJSON));
+	}
+
+	adaptProviderPredictionResult(modelId, predictionResultJSON) {
+		return this.getAdapter().toPredictionResult(JSON.parse(predictionResultJSON), modelId);
+	}
+
+	getHttpMethod(nluMethodType) {
+		const httpConnectionInfos = this._httpConnectionInfosByType[nluMethodType];
+		if (httpConnectionInfos && httpConnectionInfos.length) {
+			return httpConnectionInfos[0].http_method;
+		}
+	}
+
+	_loadDriver() {
+		const className = this.constructor.name;
+
+		const driverGr = new GlideRecord("open_nlu_driver");
+		driverGr.addQuery("script_name", "ENDSWITH", className);
+		driverGr.setLimit(1);
+		driverGr.query();
+		if (!driverGr.next()) {
+			throw new Error("NLU Driver record is not found for " + className + ".");
+		}
+
+		this._driverSysId = driverGr.getUniqueValue();
+
+		const adapterScriptName = driverGr.adapter_script_name.toString();
+		if (adapterScriptName) {
+			const extensionPoints = new GlideScriptedExtensionPoint().getExtensions("GPTExtension");
+			for (let i = 0, len = extensionPoints.length; i < len; i++) {
+				const ext = extensionPoints[i];
+				if (ext.canCreateAdapter(adapterScriptName)) {
+					this._adapter = ext.createAdapter(adapterScriptName);
+					return;
+				}
+			}
+			
+			throw new Error("No GPTExtension found to for " + adapterScriptName + ".");
+		}
+	}
+
+	_loadConnectionConfigs(customAttributes) {
+		this._connectionAttributesMap = {
+			"http_method": {"type": "string"},
+			"location":{"type": "string"},
+			"instance_id":{"type": "string"},
+			"api_version": {"type": "string"},
+			"published_version":{"type": "string"},
+			"http_headers":{"type": "object"}
+		};
+		for (let name in customAttributes) {
+			if (customAttributes.hasOwnProperty(name)) {
+				this._connectionAttributesMap[name] = customAttributes[name];
+			}
+		}
+
+		// Load the Connection Configurations
+		const driverConnectionGr = new GlideRecord('open_nlu_driver_http_connection');
+		driverConnectionGr.addQuery("open_nlu_driver", this._driverSysId);
+		driverConnectionGr.query();
+		this._httpConnectionInfosByType = [];
+		while (driverConnectionGr.next()) {
+			const connectionInfo = {
+				"endpoint": this._asString(driverConnectionGr.http_connection.connection_url),
+				"http_connection_record_sys_id": this._asString(driverConnectionGr.http_connection),
+				"http_method": this._asString(driverConnectionGr.http_method),
+				"location": "",
+				"instance_id": "",
+				"api_version": "",
+				"published_version": "",
+				"query_parameters": {},
+				"http_headers": {},
+				"type": "string"
+			};
+
+			let connectionInfosForType = this._httpConnectionInfosByType[driverConnectionGr.nlu_resource_type];
+			if (!connectionInfosForType) {
+				connectionInfosForType = [];
+				this._httpConnectionInfosByType[driverConnectionGr.nlu_resource_type] = connectionInfosForType;
+			}
+			connectionInfosForType.push(connectionInfo);
+
+			const connectionAttributesGr = new GlideRecord("connection_attributes");
+			connectionAttributesGr.addQuery("model", driverConnectionGr.http_connection.connection_alias);
+			connectionAttributesGr.query();
+			while (connectionAttributesGr.next()) {
+				for (let key in this._connectionAttributesMap) {
+					if (!this._connectionAttributesMap.hasOwnProperty(key)) continue;
+					const item = this._connectionAttributesMap[key];
+					if (connectionAttributesGr.element == this._asString(key)) {
+						if ("object" == this._asString(item.type)) {
+							if (!connectionInfo[key]) {
+								connectionInfo[key] = {};
+							}
+							connectionInfo[key].type = "object";
+							const obj = JSON.parse(this._asString(connectionAttributesGr.default_value));
+							for (let objKey in obj) {
+								if (obj.hasOwnProperty(objKey)) {
+									connectionInfo[key][objKey] = obj[objKey];
+								}
+							}
+						} else {
+							connectionInfo[key].type = "string";
+							connectionInfo[key] = this._asString(connectionAttributesGr.default_value);
+						}
+					}
+				}
+			}
+		}
+
+		const errors = [];
+		this._checkForResourceConnnection(this._httpConnectionInfosByType, "models", errors);
+		this._checkForResourceConnnection(this._httpConnectionInfosByType, "intents", errors);
+		this._checkForResourceConnnection(this._httpConnectionInfosByType, "entities", errors);
+		this._checkForResourceConnnection(this._httpConnectionInfosByType, "prediction", errors);
+		if (errors.length > 0) {
+			throw new Error("Invalid connection configuration: " + errors.join(", "));
+		}
+	}
+
+	_getHttpConnectionInfos(resourceType, modelId) {
+		const connectionInfos = JSON.parse(JSON.stringify(this._httpConnectionInfosByType[resourceType]));
+		for (let i = 0; i < connectionInfos.length; i++) {
+			const connectionInfo = connectionInfos[i];
+			for (let name in this._connectionAttributesMap) {
+				if (!this._connectionAttributesMap.hasOwnProperty(name)) continue;
+				if (this._asString(connectionInfo[name].type) == "object") continue;
+				connectionInfo.endpoint = connectionInfo.endpoint.replace("{{" + name + "}}", connectionInfo[name]);
+			}
+
+			if (!gs.nil(modelId)) {
+				connectionInfo.endpoint = connectionInfo.endpoint.replace("{{model_id}}", modelId);
+			}
+		}
+		return connectionInfos;
+	}
+
+	_checkForResourceConnnection(httpConnectionInfosByType, resourceType, errors) {
+		if (gs.nil(httpConnectionInfosByType[resourceType])) {
+			errors.push("No connection configured for NLU resource type '" + resourceType + "'.");
+		}
+	}
+
+	_asString(value) {
+		if (!gs.nil(value)) return '' + value;
+	}
+}]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2023-08-13 20:14:36</sys_created_on>
+        <sys_id>2b486dc79760f110d70ef207f053af08</sys_id>
+        <sys_mod_count>8</sys_mod_count>
+        <sys_name>ScopedHttpNLUService</sys_name>
+        <sys_package display_value="GPT" source="x_424426_gpt">2b808f2097d87110d70ef207f053afb4</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="GPT">2b808f2097d87110d70ef207f053afb4</sys_scope>
+        <sys_update_name>sys_script_include_2b486dc79760f110d70ef207f053af08</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2023-08-13 20:59:18</sys_updated_on>
+    </sys_script_include>
+</record_update>

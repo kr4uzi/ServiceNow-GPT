@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_424426_gpt.ScopedHttpNLUAdapter</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Base class for adapting requests/responses to/from external NLU providers.&#13;
+Scoped Implementation for HttpNLUAdapter (which is unfortunately not accessible from scoped apps):&#13;
+/nav_to.do?uri=sys_script_include.do?sys_id=c7932bb53b40001074bc456993efc455</description>
+        <name>ScopedHttpNLUAdapter</name>
+        <script><![CDATA[class ScopedHttpNLUAdapter {
+	constructor() {
+
+	}
+
+	/**
+	 * Subclasses should override this function. The overridden function should adapt
+	 * the external NLU provider's models object to a normalized models object in the
+	 * following form:
+	 * {"models": [{"name":name1, "id":id1}, {"name":name2, "id":id2}}]}
+	 *
+	 * @param externalNLUProviderModels
+	 * @return {"models": [{"name":name1, "id":id1}, {"name":name2, "id":id2}}]}
+	 * */
+	toModels(externalNLUProviderModels) {
+
+	}
+
+	/**
+	 * Subclasses should override this function. The overridden function should adapt
+	 * the external NLU provider's intents object to a normalized model intents object in the
+	 * following form:
+	 * {"model_id": externalNLUProviderModelId, "intents": [{"name":name1, "id":id1}, {"name":name2, "id":id2}]}}
+	 *
+	 * @param externalNLUProviderModelId
+	 * @param externalNLUProviderIntents
+	 * @returns {"model_id": externalNLUProviderModelId, "intents": [{"name":name1, "id":id1}, {"name":name2, "id":id2}]}}
+	 */
+	toModelIntents(externalNLUProviderModelId, externalNLUProviderIntents) {
+
+	}
+
+	/**
+	 * Subclasses should override this function. The overridden function should adapt
+	 * the external NLU provider's entities object to a normalized model intents object in the
+	 * following form:
+	 * {"model_id": externalNLUProviderModelId, "scored_intents": [{"name":name1, "id":id1, "confidence":confidence}, {"name":name2, "id":id2, "confidence":confidence}], "scored_entities": [{"name":name1, "id":id1, "value":value,"confidence":confidence}, {"name":name2, "id":id2, "value":value, "confidence":confidence}]}}
+	 *
+	 * @param externalNLUProviderModelId
+	 * @param externalNLUProviderEntities
+	 * @returns {"model_id": externalNLUProviderModelId, "intents": [{"name":name1, "id":id1}, {"name":name2, "id":id2}]}}
+	 */
+	toModelEntities(externalNLUProviderModelId, externalNLUProviderEntities) {
+
+	}
+
+	/**
+	 * Subclasses should override this function. The overridden function should adapt
+	 * the external NLU provider's prediction result object to a normalized model prediction result object in the
+	 * following form:
+	 * {"model_id": externalNLUProviderModelId, "entities": [{"name":name1, "id":id1}, {"name":name2, "id":id2}]}}
+	 *
+	 * @param externalNLUProviderPredictionResult
+	 * @param externalNLUProviderModelId
+	 * @returns {"model_id": externalNLUProviderModelId, "scored_intents": [{"name":name1, "id":id1, "confidence":confidence}, {"name":name2, "id":id2, "confidence":confidence}], "scored_entities": [{"name":name1, "id":id1, "value":value,"confidence":confidence}, {"name":name2, "id":id2, "value":value, "confidence":confidence}]}}
+	 */
+	toPredictionResult(externalNLUProviderPredictionResult, modelId) {
+
+	}
+
+	toError(errorCode, errorMessage) {
+		let errorType = 'SERVER_ERROR';
+		if (errorCode === 400) {
+			errorType = 'BAD_REQUEST';
+		} else if (errorCode === 404) {
+			errorType = 'NOT_FOUND';
+		} else if (errorCode === 401 || errorCode === 403) {
+			errorType = 'UNAUTHORIZED';
+		}
+
+		return { 'type': errorType, 'message': errorMessage, 'provider_error': errorCode };
+	}
+}]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2023-08-13 20:39:52</sys_created_on>
+        <sys_id>619fad0397a0f110d70ef207f053af22</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>ScopedHttpNLUAdapter</sys_name>
+        <sys_package display_value="GPT" source="x_424426_gpt">2b808f2097d87110d70ef207f053afb4</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="GPT">2b808f2097d87110d70ef207f053afb4</sys_scope>
+        <sys_update_name>sys_script_include_619fad0397a0f110d70ef207f053af22</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2023-08-13 20:39:52</sys_updated_on>
+    </sys_script_include>
+</record_update>

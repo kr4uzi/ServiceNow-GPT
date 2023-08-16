@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_script">
+    <sys_ui_script action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <description>Enable CTRL (win) / CMD (mac) + SHIFT + P for GPT prompt on all forms/lists</description>
+        <global>false</global>
+        <ignore_in_now_experience>false</ignore_in_now_experience>
+        <name>x_424426_gpt.gpt_prompt</name>
+        <script><![CDATA[var x_424426_gpt = x_424426_gpt || {};
+x_424426_gpt.gpt_prompt = (function() {
+	"use strict";
+
+	/* global GlideModal, g_form */
+	/* eslint no-undef: "error" */
+	var $window, g_user;	
+	x_424426_gpt.loader.get('window', function (_window) {
+		injectPrompt($window = _window, g_user);
+	});
+	
+	x_424426_gpt.loader.get('g_user', function (_g_user) {
+		injectPrompt($window, g_user = _g_user);
+	});
+	
+	function injectPrompt($window, $config) {
+		if ($window && g_user) {
+			var isMac = $window.navigator.userAgent.indexOf('Mac OS X') > -1;
+			$window.document.addEventListener('keydown', function (event) {
+				if ((isMac ? event.metaKey : event.ctrlKey) && event.shiftKey && (event.key == 'p' || event.key == 'P')) {
+					if ($window.location.href.indexOf('x_424426_gpt_conversation') > -1) {
+						return;
+					}
+					
+					var gm = new GlideModal('gpt_conversation', false, 'modal-md');
+					gm.setTitle('Chat GPT');
+					gm.renderIframe('x_424426_gpt_conversation.do?sysparm_is_dialog_form=true', function () {
+						if (typeof g_form !== 'undefined') {
+							this.addContext('You are on the following Record: Table=' + $window.g_form.getTableName() + ' SysID=' + $window.g_form.getUniqueValue());
+							this.addContextVariable('g_form', $window.g_form);
+						}
+						
+						gm.maximizeHeight();
+					});
+				}
+			});
+		}
+	}
+
+	return {	
+		type: 'gpt_prompt'
+	};
+})();
+]]></script>
+        <script_name>gpt_prompt</script_name>
+        <sys_class_name>sys_ui_script</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2023-07-25 07:03:43</sys_created_on>
+        <sys_id>716e70b09798b110d70ef207f053af7c</sys_id>
+        <sys_mod_count>7</sys_mod_count>
+        <sys_name>x_424426_gpt.gpt_prompt</sys_name>
+        <sys_package display_value="GPT" source="x_424426_gpt">2b808f2097d87110d70ef207f053afb4</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="GPT">2b808f2097d87110d70ef207f053afb4</sys_scope>
+        <sys_update_name>sys_ui_script_716e70b09798b110d70ef207f053af7c</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2023-08-16 19:20:03</sys_updated_on>
+        <ui_type>0</ui_type>
+        <use_scoped_format>true</use_scoped_format>
+    </sys_ui_script>
+</record_update>

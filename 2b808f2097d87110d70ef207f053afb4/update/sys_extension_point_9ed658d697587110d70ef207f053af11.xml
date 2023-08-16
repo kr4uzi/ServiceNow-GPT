@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_extension_point">
+    <sys_extension_point action="INSERT_OR_UPDATE">
+        <api_name>x_424426_gpt.GPTExtension</api_name>
+        <description/>
+        <example><![CDATA[var GPTExtension = Class.create();
+GPTExtension.prototype = {
+    initialize: function() {
+		
+    },
+	
+	canCreateAdapter: function (adapterName) {
+		return false;
+	},
+	
+	createAdapter : function (adapterName) {
+		
+	},
+
+    type: 'GPTExtension'
+};]]></example>
+        <name>GPTExtension</name>
+        <restrict_scope>false</restrict_scope>
+        <sys_class_name>sys_extension_point</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2023-07-29 20:11:27</sys_created_on>
+        <sys_id>9ed658d697587110d70ef207f053af11</sys_id>
+        <sys_mod_count>5</sys_mod_count>
+        <sys_name>GPTExtension</sys_name>
+        <sys_package display_value="GPT" source="x_424426_gpt">2b808f2097d87110d70ef207f053afb4</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="GPT">2b808f2097d87110d70ef207f053afb4</sys_scope>
+        <sys_update_name>sys_extension_point_9ed658d697587110d70ef207f053af11</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2023-08-13 20:28:41</sys_updated_on>
+    </sys_extension_point>
+</record_update>

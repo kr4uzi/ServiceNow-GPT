@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="x_424426_gpt_function">
+    <x_424426_gpt_function action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <description>Returns a list of all open incidents of the user</description>
+        <name>get_open_incidents</name>
+        <run_at>server</run_at>
+        <script><![CDATA[/* global global, GlideRecordSecure */
+/* global caller */
+/* eslint no-undef: "error" */
+(function (caller) {
+	const incidentGr = new GlideRecordSecure('incident');
+	incidentGr.addQuery('state', '!=', global.IncidentState.RESOLVED);
+	incidentGr.addQuery('state', '!=', global.IncidentState.CLOSED);
+	incidentGr.addQuery('state', '!=', global.IncidentState.CANCELED);
+	incidentGr.addQuery('caller_id', caller);
+	incidentGr.orderByDesc('sys_updated_on');
+	incidentGr.query();
+	
+	const incidents = [];
+	while (incidentGr.next()) {
+		incidents.push({
+			sys_id: incidentGr.getUniqueValue(),
+			short_description: incidentGr.short_description.toString(),
+			description: incidentGr.description.toString()
+		});
+	}
+	
+	return JSON.stringify(incidents);
+})(caller);]]></script>
+        <sys_class_name>x_424426_gpt_function</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2023-07-24 23:00:20</sys_created_on>
+        <sys_id>a1fe0bec9750b110d70ef207f053af7f</sys_id>
+        <sys_mod_count>5</sys_mod_count>
+        <sys_name>get_open_incidents</sys_name>
+        <sys_package display_value="GPT" source="x_424426_gpt">2b808f2097d87110d70ef207f053afb4</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="GPT">2b808f2097d87110d70ef207f053afb4</sys_scope>
+        <sys_update_name>x_424426_gpt_function_a1fe0bec9750b110d70ef207f053af7f</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2023-07-26 19:16:43</sys_updated_on>
+    </x_424426_gpt_function>
+</record_update>

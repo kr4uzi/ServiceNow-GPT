@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_424426_gpt.GPTUtilClient</api_name>
+        <caller_access/>
+        <client_callable>true</client_callable>
+        <description/>
+        <name>GPTUtilClient</name>
+        <script><![CDATA[/* global global, x_424426_gpt, gs, sn_cc */
+/* global Class, GlideRecordSecure, GlideScopedEvaluator */
+/* eslint no-undef: "error" */
+var GPTUtilClient = Class.create();
+GPTUtilClient.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
+	initialize: function(request, responseXML, gc) {
+		global.AbstractAjaxProcessor.prototype.initialize.apply(this, arguments);
+		this.gptUtil = new x_424426_gpt.GPTUtil();
+	},
+	
+	completion: function () {
+		const result = {
+			status: 'error',
+			message: ''
+		};
+		
+		
+		let messages = this.getParameter('messages');
+		if (messages) {			
+			try {
+				messages = JSON.parse(messages);
+				const availableFunctions = this.gptUtil.getAvailableFunctions(gs.getUserID());
+				const backgroundMessages = [];
+				
+				let responseMessages = this.gptUtil.completion(messages, availableFunctions);
+				let functionCall = responseMessages[0].function_call;
+				while (functionCall && functionCall.name) {
+					const functionGr = new GlideRecordSecure('x_424426_gpt_function');
+					functionGr.addQuery('active', true);
+					functionGr.addQuery('name', functionCall.name);
+					functionGr.setLimit(1);
+					functionGr.query();
+					if (functionGr.next()) {
+						const args = JSON.parse(responseMessages[0].function_call.arguments);
+						
+						if (functionGr.run_at == 'server') {						
+							const gse = new GlideScopedEvaluator();
+
+							for (let arg in args) {
+								gse.putVariable(arg, args[arg]);
+							}
+
+							messages.push(responseMessages[0]);
+							backgroundMessages.push(messages[messages.length - 1]);
+							messages.push({
+								role: 'function',
+								name: functionCall.name,
+								content: gse.evaluateScript(functionGr, 'script')
+							});
+							backgroundMessages.push(messages[messages.length - 1]);
+
+							responseMessages = this.gptUtil.completion(messages, availableFunctions);
+							functionCall = responseMessages[0].function_call;
+						} else {
+							result.func = {
+								name: functionCall.name,
+								script: functionGr.script.toString(),
+								args: args
+							};
+							
+							break;
+						}
+					} else {
+						throw new Error('Unknown Function: ' + functionCall.name);
+					}
+				}
+				
+				result.background_messages = backgroundMessages;
+				result.response = responseMessages[0].content;
+				result.status = 'success';
+			} catch (e) {
+				result.status = 'error';
+				result.message = e.toString();
+
+				if (gs.hasRole('admin') && e.stack) {
+					result.message += '\nStack: ' + e.stack;
+				}
+			}
+		} else {
+			result.message = gs.getMessage('gpt_invalid_parameters');
+		}
+		
+		return JSON.stringify(result);
+	},
+
+    type: 'GPTUtilClient'
+});]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2023-07-25 06:54:21</sys_created_on>
+        <sys_id>d60d30309798b110d70ef207f053afde</sys_id>
+        <sys_mod_count>16</sys_mod_count>
+        <sys_name>GPTUtilClient</sys_name>
+        <sys_package display_value="GPT" source="x_424426_gpt">2b808f2097d87110d70ef207f053afb4</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="GPT">2b808f2097d87110d70ef207f053afb4</sys_scope>
+        <sys_update_name>sys_script_include_d60d30309798b110d70ef207f053afde</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2023-08-16 19:26:29</sys_updated_on>
+    </sys_script_include>
+</record_update>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="x_424426_gpt_function_parameter">
+    <x_424426_gpt_function_parameter action="INSERT_OR_UPDATE">
+        <description>The record's table</description>
+        <enum/>
+        <function display_value="record_to_json">f41f7e7597903110d70ef207f053afdc</function>
+        <mandatory>true</mandatory>
+        <name>table</name>
+        <sys_class_name>x_424426_gpt_function_parameter</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2023-07-28 19:01:40</sys_created_on>
+        <sys_id>911f327597903110d70ef207f053afa7</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>table</sys_name>
+        <sys_package display_value="GPT" source="x_424426_gpt">2b808f2097d87110d70ef207f053afb4</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="GPT">2b808f2097d87110d70ef207f053afb4</sys_scope>
+        <sys_update_name>x_424426_gpt_function_parameter_911f327597903110d70ef207f053afa7</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2023-07-28 19:01:40</sys_updated_on>
+        <type>string</type>
+    </x_424426_gpt_function_parameter>
+</record_update>

@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="ecc_agent_script_include">
+    <ecc_agent_script_include action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <description/>
+        <name>GPTProbeUtil</name>
+        <script><![CDATA[/* global ms, Packages, Class, GPTProcessExecutor */
+/* eslint no-undef: "error" */
+var GPTProbeUtil = Class.create();
+GPTProbeUtil.prototype = {
+	initialize: function () {
+		
+	},
+	
+	download: function (attachmentSysID) {
+		var JavaFileOutputStream = Packages.java.io.FileOutputStream;
+		var JavaFile = Packages.java.io.File;
+		var JavaURL = Packages.java.net.URL;
+		var JavaProxy = Packages.java.net.Proxy;
+		var JavaAuthenticator = Packages.java.net.Authenticator;
+		var JavaInetSocketAddress = Packages.java.net.InetSocketAddress;
+		var JavaHttpURLConnection = Packages.java.net.HttpURLConnection;
+		var JavaSystem = Packages.java.lang.System;
+		var JavaString = Packages.java.lang.String;
+		
+		var proxy = JavaProxy.NO_PROXY;
+		if (ms.getConfigParameter('mid.proxy.use_proxy') == 'true') {
+			proxy = new JavaProxy(
+				JavaProxy.Type.HTTP,
+				new JavaInetSocketAddress(
+					ms.getConfigParameter('mid.proxy.host'),
+					ms.getConfigParameter('mid.proxy.port')
+				)
+			);
+		}
+		
+		var instanceURL = ms.getConfigParameter('url');
+		if (!instanceURL.endsWith('/')) {
+			instanceURL += '/';
+		}
+		
+		var url = new JavaURL(instanceURL + '/api/now/attachment/' + attachmentSysID + '/file');
+		var conn = url.openConnection(proxy);
+		conn.setRequestMethod('GET');
+		conn.setRequestProperty('Accept', 'application/octet-stream');
+		conn.setRequestProperty(
+			'Authorization',
+			'Basic ' + encodeCredentials(
+				ms.getConfigParameter('mid.instance.username'), 
+				ms.getConfigParameter('mid.instance.password')
+			)
+		);
+		
+		if (proxy != JavaProxy.NO_PROXY) {
+			var proxyUser = ms.getConfigParameter('mid.proxy.username');
+			var proxyPassword = ms.getConfigParameter('mid.proxy.password') || '';
+			if (proxyUser) {				
+				// https://stackoverflow.com/a/43263674/3227693
+				// For Java 1.8 and higher you must set jdk.http.auth.tunneling.disabledSchemes=
+				// to make proxies with Basic Authorization work with https
+				JavaSystem.setProperty('jdk.http.auth.tunneling.disabledSchemes', '');
+				
+				conn.setRequestProperty('Proxy-Authorization', 'Basic ' + encodeCredentials(proxyUser, proxyPassword));
+			}
+		}
+		
+		var responseCode = conn.getResponseCode();
+		if (responseCode == JavaHttpURLConnection.HTTP_OK) {
+			var metaData = JSON.parse(conn.getHeaderField('X-Attachment-Metadata'));
+			var fileName = metaData.file_name;
+			
+			var is = conn.getInputStream();
+			var file = JavaFile.createTempFile('GPTProbeUtil_' + fileName, null);
+			var os = new JavaFileOutputStream(file);
+			var buffer = Packages.java.lang.reflect.Array.newInstance(Packages.java.lang.Byte.TYPE, 1024);
+			var length;
+			while ((length = is.read(buffer)) > 0) {
+				os.write(buffer, 0, length);
+			}
+			
+			is.close();
+			os.close();
+			return file.getAbsolutePath();
+		}
+		
+		return null;
+		
+		function encodeCredentials(user, password) {
+			var JavaBase64 = Packages.java.util.Base64;
+			var JavaString = Packages.java.lang.String;
+			
+			var credentialPair = new JavaString(user + ':' + password);
+			return JavaBase64.getEncoder().encodeToString(credentialPair.getBytes());
+		}
+	},
+	
+	pdf2text: function (contentBase64) {
+		var result = {
+			status: '',
+			message: ''
+		};
+		
+		try {
+			result.text = this._pdf2text(contentBase64);
+			result.status = 'success';			
+		} catch (e) {
+			result.status = 'error';
+			result.message = e.message();
+		}
+		
+		return JSON.stringify(result);
+	},
+	
+	_pdf2text: function (contentBase64) {
+		var JavaFile = Packages.java.io.File;
+		var JavaFileOutputStream = Packages.java.io.FileOutputStream;
+		var JavaFiles = Packages.java.nio.file.Files;
+		var JavaBase64 = Packages.java.util.Base64;
+		
+		var os = null, pdfFile = null, textFile = null;
+		try {
+			pdfFile = JavaFile.createTempFile('pdf2text_in', '.pdf');
+			textFile = JavaFile.createTempFile('pdf2text_out', '.txt');
+			
+            os = new JavaFileOutputStream(pdfFile);
+            os.write(JavaBase64.getDecoder().decode(contentBase64));
+			
+			var textFilePath = textFile.getAbsolutePath();
+			var pe = new GPTProcessExecutor('pdftotext', pdfFile.getAbsolutePath(), textFilePath);
+			var res = pe.exec();
+			if (res.exitCode != 0) {
+				throw new Error(res.stderr);
+			}
+			
+			return JavaFiles.readString(textFilePath);
+		} finally {
+			if (os) {
+				os.close();
+			}
+			
+			if (pdfFile) {
+				pdfFile['devare']();
+			}
+			
+			if (textFile) {
+				textFile['devare']();
+			}
+		}
+	},
+	
+	type: 'GPTProbeUtil' 
+};]]></script>
+        <sys_class_name>ecc_agent_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2023-07-29 15:08:06</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>c509c70a97d07110d70ef207f053afaf</sys_id>
+        <sys_mod_count>9</sys_mod_count>
+        <sys_name>GPTProbeUtil</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="GPT" source="x_424426_gpt">2b808f2097d87110d70ef207f053afb4</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="GPT">2b808f2097d87110d70ef207f053afb4</sys_scope>
+        <sys_update_name>ecc_agent_script_include_c509c70a97d07110d70ef207f053afaf</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2023-07-30 21:30:26</sys_updated_on>
+    </ecc_agent_script_include>
+</record_update>

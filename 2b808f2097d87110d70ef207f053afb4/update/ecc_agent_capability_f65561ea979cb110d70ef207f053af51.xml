@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="ecc_agent_capability">
+    <ecc_agent_capability action="INSERT_OR_UPDATE">
+        <capability>GPT_PDF2Text</capability>
+        <capability_value>GPT_PDF2Text</capability_value>
+        <sys_class_name>ecc_agent_capability</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2023-07-30 20:20:21</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>f65561ea979cb110d70ef207f053af51</sys_id>
+        <sys_mod_count>1</sys_mod_count>
+        <sys_name>GPT_PDF2Text</sys_name>
+        <sys_package display_value="GPT" source="x_424426_gpt">2b808f2097d87110d70ef207f053afb4</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="GPT">2b808f2097d87110d70ef207f053afb4</sys_scope>
+        <sys_update_name>ecc_agent_capability_f65561ea979cb110d70ef207f053af51</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2023-07-30 20:25:16</sys_updated_on>
+        <value/>
+    </ecc_agent_capability>
+</record_update>

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?><database>
+    <element attributes="update_synch=true" db_object_id="a6abcf689750b110d70ef207f053aff3" extends="sys_metadata" label="Function Parameter" max_length="40" name="x_424426_gpt_function_parameter" type="collection">
+        <element label="Description" max_length="1000" name="description" type="string"/>
+        <element label="Enum" max_length="1000" name="enum" type="string"/>
+        <element label="Function" mandatory="true" max_length="32" name="function" reference="x_424426_gpt_function" reference_cascade_rule="cascade" type="reference"/>
+        <element default="true" label="Mandatory" max_length="40" name="mandatory" type="boolean"/>
+        <element label="Name" mandatory="true" max_length="100" name="name" type="string"/>
+        <element choice="1" label="Type" mandatory="true" max_length="40" name="type" type="choice">
+            <choice>
+                <element inactive_on_update="false" label="String" sequence="10" value="string"/>
+                <element inactive_on_update="false" label="Boolean" sequence="20" value="boolean"/>
+                <element inactive_on_update="false" label="Integer" sequence="30" value="integer"/>
+                <element inactive_on_update="false" label="Float" sequence="40" value="number"/>
+                <element inactive_on_update="false" label="Array" sequence="50" value="array"/>
+            </choice>
+        </element>
+        <index name="index">
+            <element name="function"/>
+        </index>
+    </element>
+</database>

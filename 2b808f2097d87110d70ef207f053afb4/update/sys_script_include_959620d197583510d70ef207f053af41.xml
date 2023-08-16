@@ -1,0 +1,278 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_424426_gpt.GPTUtil</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <name>GPTUtil</name>
+        <script><![CDATA[/* global sn_scoped_cache, sn_uc, sn_cc, sn_ws, XMLDocument2, GlideDateTime, GlideSysAttachment, GlideScriptedExtensionPoint, GlideTextReader, GlideScriptedHierarchicalWorker, gs, global */
+/* global Class, GlideRecord */
+/* eslint no-undef: "error" */
+var GPTUtil = Class.create();
+GPTUtil.prototype = {
+    initialize: function() {
+		const connectionInfo = new sn_cc.ConnectionInfoProvider()
+			.getConnectionInfo("18a04fac9710b110d70ef207f053af4c");
+		
+		this._api_key = connectionInfo.getCredentialAttribute("api_key");
+		this._connection_url = connectionInfo.getAttribute("connection_url");
+		this._language_model = connectionInfo.getExtendedAttributes()["model"];
+    },
+	
+	pdf2text: function (attachmentSysID) {
+		const finder = new global.MIDServerFinder();
+		finder.setCapabilities(["GPT_PDF2Text"]);
+		const midServers = finder.getMIDServers();
+		if (midServers.length == 0) {
+			throw new Error(finder.getStatusMessage());
+		}
+		
+		const is = new GlideSysAttachment().getContentStream(attachmentSysID);
+		var reader = new GlideTextReader(is);
+		let content = '';
+		let line;
+		while ((line = reader.readLine()) != null) {
+			content += line;
+		}
+		
+		const eccSysID = this.jsProbe({
+			mid_server_name: midServers[new GlideDateTime().getNumericValue() % midServers.length],
+			script: "new GPTProbeUtil().pdf2text(probe.getParameter('content'))",
+			parameters: {
+				content: gs.base64Encode(content)
+			}
+		});
+		
+		const sleepExtensionPoint = 0;
+		const extensionPoints = new GlideScriptedExtensionPoint().getExtensions("GPTExtension");
+		for (let i = 0, length = extensionPoints.length; i < length; i++) {
+			const extensionPoint = extensionPoints[i];
+			if ("sleep" in extensionPoint) {
+				extensionPoint.initialize();
+				
+				const eccGr = new GlideRecord("ecc_queue");
+				eccGr.addQuery("queue", "input");
+				eccGr.addQuery("response_to", eccSysID);
+				eccGr.setLimit(1);
+				
+				let secondsWaited = 0;
+				while (secondsWaited < 60) {
+					eccGr.query();
+					if (eccGr.next()) {
+						return this._getEccOutput(eccGr);
+					}
+					
+					extensionPoint.sleep(1000);
+					secondsWaited++;
+				}
+				
+				break;
+			}
+		}
+	},
+	
+	_getEccOutput: function (eccGr) {
+		let xml = null;
+		if (eccGr.payload == "<see_attachment/>") {
+			const gsa = new GlideSysAttachment();
+			const attachmentGr = gsa.getAttachments(eccGr.getTableName(), eccGr.sys_id);
+			if (attachmentGr.next()) {
+				const contentStream = gsa.getContentStream(attachmentGr.sys_id);
+				xml = new XMLDocument2(contentStream);
+			}
+		} else {
+			xml = new XMLDocument2();
+			xml.parseXML(eccGr.payload);
+		}
+
+		return xml.getNode("//output").getTextContent();
+	},
+	
+	processJSProbe: function (eccGr) {
+		try {
+			let xml = null;
+			if (eccGr.payload == "<see_attachment/>") {
+				const gsa = new GlideSysAttachment();
+				const attachmentGr = gsa.getAttachments(eccGr.getTableName(), eccGr.sys_id);
+				if (attachmentGr.next()) {
+					const contentStream = gsa.getContentStream(attachmentGr.sys_id);
+					xml = new XMLDocument2(contentStream);
+				}
+			} else {
+				xml = new XMLDocument2();
+				xml.parseXML(eccGr.payload);
+			}
+
+			const result = xml.getNode("//output").getTextContent();
+			const callback = JSON.parse(xml.getNode("//parameter[@name='__callback']").getAttribute("value"));
+			if (callback) {
+				const extensionPoints = new GlideScriptedExtensionPoint().getExtensions("GPTExtension");
+				for (let i = 0, length = extensionPoints.length; i < length; i++) {
+					const extensionPoint = extensionPoints[i];
+					if (callback.method in extensionPoint) {
+						const args = [result];
+						if (callback.context) {
+							args.push(callback.context);
+						}
+						
+						extensionPoint.initialize();
+						extensionPoint.prototype[callback.method].call(extensionPoint, args);
+						break;
+					}
+				}
+			}
+			
+			eccGr.state = "processed";
+			eccGr.processed = new GlideDateTime();
+		} catch (e) {
+			eccGr.state = "error";
+			eccGr.error_string = e.message();
+		}
+	},
+	
+	jsProbe: function (config) {
+		const eccGr = new GlideRecord("ecc_queue");
+		eccGr.newRecord();
+		eccGr.agent = "mid.server." + config.mid_server_name;
+		eccGr.queue = "output";
+		eccGr.state = "ready";
+		eccGr.topic = "JavascriptProbe";
+		eccGr.name = "x_424426_gpt_probe";
+		eccGr.source = "x_424426_gpt.GPTUtil";
+		
+		const doc = new XMLDocument2();
+		const parameters = doc.createElement("parameters");
+
+		const scriptElement = doc.createElement("parameter");
+		scriptElement.setAttribute("name", "script");
+		scriptElement.setAttribute("value", config.script);
+		parameters.appendChild(scriptElement);
+
+		for (let param in config.parameters) {
+			const paramElement = doc.createElement("parameter");
+			paramElement.setAttribute("name", param);
+			paramElement.setAttribute("value", config.parameters[param]);
+			parameters.appendChild(paramElement);
+		}
+		
+		if (config.callback) {
+			const paramElement = doc.createElement("parameter");
+			paramElement.setAttribute("name", "__callback");
+			paramElement.setAttribute("value", JSON.stringify(config.callback));
+			parameters.appendChild(paramElement);
+		}
+		
+		eccGr.payload = doc.toString();
+		return eccGr.insert();
+	},
+	
+	completion: function (messages, functions) {
+		const request = new sn_ws.RESTMessageV2();        
+		request.setHttpMethod("POST");
+		request.setEndpoint(this._connection_url + "/v1/chat/completions");
+		request.setRequestHeader("Content-Type", "application/json");
+		request.setRequestHeader("Authorization", "Bearer " + this._api_key);
+		
+		const requestBody = {
+			model: this._language_model,
+			messages: messages
+		};
+		
+		if (functions && functions.length) {
+			requestBody.functions = functions;
+		}
+		
+		request.setRequestBody(JSON.stringify(requestBody));
+		const response = request.execute();
+		const statusCode = response.getStatusCode();
+		const responseBody = response.getBody();
+		if (statusCode == 200) {
+			return JSON.parse(responseBody).choices.map(c => c.message);
+		}
+		
+		throw new Error("Failed to call completion API (" + statusCode + "): " + responseBody);
+	},
+	
+	getAvailableFunctions: function (userId) {
+		let funcs = sn_scoped_cache.ScopedCacheManager.get("gpt_function_cache", "functions");
+		if (funcs) {
+			funcs = JSON.parse(funcs);
+		} else {    
+			const funcGr = new GlideRecord("x_424426_gpt_function");
+			funcGr.addQuery("active", true);
+			funcGr.orderByDesc("sys_created_on");
+			funcGr.query();
+
+			const funcMap = {};
+			while (funcGr.next()) {
+				funcMap[funcGr.getUniqueValue()] = {
+					available_for: [],
+					name: funcGr.name.toString(),
+					description: funcGr.description.toString(),
+					parameters: {
+						type: "object",
+						properties: {}
+					}
+				};
+			}
+
+			const funcAvailableGr = new GlideRecord("x_424426_gpt_function_user_criteria_mtom");
+			funcAvailableGr.addQuery("function", "IN", Object.keys(funcMap));
+			funcAvailableGr.query();
+			while (funcAvailableGr.next()) {
+				const func = funcMap[funcAvailableGr.getValue("function")];
+				func.available_for.push(funcAvailableGr.available_for.toString());
+			}
+
+			const funcParamGr = new GlideRecord("x_424426_gpt_function_parameter");
+			funcParamGr.addQuery("function", "IN", Object.keys(funcMap));
+			funcParamGr.query();
+			while (funcParamGr.next()) {
+				const func = funcMap[funcParamGr.getValue("function")];
+				const parameterName = funcParamGr.name.toString();
+				func.parameters.properties[parameterName] = {
+					type: funcParamGr.type.toString(),
+					description: funcParamGr.description.toString()
+				};
+
+				if (funcParamGr.mandatory) {
+					if (func.parameters.required) {
+						func.parameters.required.push(parameterName);
+					} else {
+						func.parameters.required = [parameterName];
+					}
+				}
+			}
+
+			funcs = Object.values(funcMap);
+			sn_scoped_cache.ScopedCacheManager.put("gpt_function_cache", "functions", JSON.stringify(funcs));
+		}
+
+		const matchingCriteria = new sn_uc.UserCriteriaLoader.getAllUserCriteria(userId);
+		return funcs
+			.filter(f => f.available_for.length == 0 || f.available_for.some(a => matchingCriteria.indexOf(a) > -1))
+			.map(f => {
+				delete f.available_for;
+				return f;
+			})
+		;
+	},
+
+    type: "GPTUtil"
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2023-07-26 18:34:56</sys_created_on>
+        <sys_id>959620d197583510d70ef207f053af41</sys_id>
+        <sys_mod_count>20</sys_mod_count>
+        <sys_name>GPTUtil</sys_name>
+        <sys_package display_value="GPT" source="x_424426_gpt">2b808f2097d87110d70ef207f053afb4</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="GPT">2b808f2097d87110d70ef207f053afb4</sys_scope>
+        <sys_update_name>sys_script_include_959620d197583510d70ef207f053af41</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2023-08-11 22:58:53</sys_updated_on>
+    </sys_script_include>
+</record_update>
